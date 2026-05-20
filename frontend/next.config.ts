@@ -1,8 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // Produces a self-contained build in .next/standalone — used by Dockerfile
-  output: "standalone",
+  // standalone output is only for Docker — Vercel handles its own optimization
+  ...(process.env.DOCKER_BUILD === "true" && { output: "standalone" }),
 };
 
 export default nextConfig;

@@ -17,6 +17,8 @@ COPY . .
 # Build-time env — the API URL is baked into the static JS bundle
 ARG NEXT_PUBLIC_API_URL=http://localhost:8000/api/v1
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+# Enable standalone output (Docker only — Vercel uses its own system)
+ENV DOCKER_BUILD=true
 
 RUN npm run build
 
