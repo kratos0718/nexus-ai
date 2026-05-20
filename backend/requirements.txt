@@ -4,58 +4,58 @@
 # ============================================================
 
 # --- WEB FRAMEWORK ---
-fastapi==0.115.5
-uvicorn==0.32.1
-python-multipart==0.0.12
-mangum==0.17.0
+fastapi>=0.115.0
+uvicorn>=0.32.0
+python-multipart>=0.0.12
+mangum>=0.17.0
 
 # --- DATA VALIDATION ---
-pydantic==2.10.3
-pydantic-settings==2.6.1
+pydantic>=2.10.0
+pydantic-settings>=2.6.0
 
 # --- DATABASE ---
-sqlalchemy==2.0.36
-alembic==1.14.0
-asyncpg==0.30.0
-psycopg2-binary==2.9.10
+sqlalchemy>=2.0.0
+alembic>=1.14.0
+asyncpg>=0.30.0
+psycopg2-binary>=2.9.0
 
 # --- AUTHENTICATION ---
-python-jose[cryptography]==3.3.0
-passlib[bcrypt]==1.7.4
+python-jose[cryptography]>=3.3.0
+passlib[bcrypt]>=1.7.4
 bcrypt==4.0.1
-python-dotenv==1.0.1
+python-dotenv>=1.0.0
 
 # --- RATE LIMITING ---
-slowapi==0.1.9
+slowapi>=0.1.9
 
 # --- LLM ---
-groq==0.13.1
-openai==1.57.0
-tiktoken==0.8.0
+groq>=0.13.0
+openai>=1.58.1
+tiktoken>=0.8.0
 
-# --- LANGCHAIN ---
-langchain==0.3.13
-langchain-openai==0.2.14
-langchain-core==0.3.29
-langchain-groq==0.2.3
-langgraph==0.2.60
+# --- LANGCHAIN (let uv resolve compatible versions) ---
+langchain>=0.3.0
+langchain-openai>=0.2.0
+langchain-core>=0.3.29
+langchain-groq>=0.2.0
+langgraph>=0.2.0
 
 # --- VECTOR DATABASE ---
-pinecone==5.0.1
+pinecone>=5.0.0
 
 # --- DOCUMENT PROCESSING ---
-pypdf==5.1.0
-python-docx==1.1.2
-beautifulsoup4==4.12.3
-requests==2.32.3
+pypdf>=5.1.0
+python-docx>=1.1.0
+beautifulsoup4>=4.12.0
+requests>=2.32.0
 
 # --- TEXT PROCESSING ---
-nltk==3.9.1
-rank-bm25==0.2.2
+nltk>=3.9.0
+rank-bm25>=0.2.2
 numpy>=1.24.0
 
 # --- LOGGING ---
-loguru==0.7.3
+loguru>=0.7.0
 
 # --- UTILITIES ---
-aiofiles==24.1.0
+aiofiles>=24.1.0
