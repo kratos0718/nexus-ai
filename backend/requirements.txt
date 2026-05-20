@@ -41,7 +41,7 @@ langchain-groq==0.2.3
 langgraph==0.2.60
 
 # --- VECTOR DATABASE ---
-pinecone-client==5.0.1
+pinecone==5.0.1
 
 # --- DOCUMENT PROCESSING ---
 pypdf==5.1.0
