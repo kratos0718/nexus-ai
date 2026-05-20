@@ -94,6 +94,23 @@ HuggingFace · sentence-transformers · SQLAlchemy · JWT · WebSockets · RAGAS
   (RAGService) enabling independent testing and multi-channel invocation
 ```
 
+### Day 5 additions
+```
+• Built full-stack Next.js 16 frontend (App Router, TypeScript, Tailwind) with
+  login/register auth flow, document management dashboard, and real-time streaming
+  chat interface consuming SSE token stream from FastAPI backend
+
+• Implemented Axios interceptor pattern for transparent JWT refresh: on 401,
+  automatically exchanges refresh token for new access token and retries original
+  request — zero auth boilerplate across 10+ API calls
+
+• Enforced multi-tenancy at the data layer by adding user_id FK to documents table
+  and scoping all queries with user ownership filters, preventing cross-user data access
+
+• Designed streaming chat UI using fetch ReadableStream + TextDecoder, rendering
+  tokens incrementally with React state updates achieving <300ms time-to-first-render
+```
+
 ### Day 4 additions
 ```
 • Implemented JWT authentication with dual-token strategy (30-min access + 7-day

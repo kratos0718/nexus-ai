@@ -336,10 +336,12 @@ class RAGService:
         document_id: str,
         filename: str,
         source_type: str,
+        user_id: Optional[int] = None,
         file_size_bytes: int = 0,
     ) -> Document:
         doc = Document(
             document_id=document_id,
+            user_id=user_id,
             filename=filename,
             source_type=source_type,
             status=DocumentStatus.PENDING,
@@ -350,22 +352,31 @@ class RAGService:
         await db.refresh(doc)
         return doc
 
-    async def get_document(self, db: AsyncSession, document_id: str) -> Optional[Document]:
-        result = await db.execute(
-            select(Document).where(Document.document_id == document_id)
-        )
+    async def get_document(
+        self, db: AsyncSession, document_id: str, user_id: Optional[int] = None
+    ) -> Optional[Document]:
+        q = select(Document).where(Document.document_id == document_id)
+        if user_id is not None:
+            q = q.where(Document.user_id == user_id)
+        result = await db.execute(q)
         return result.scalar_one_or_none()
 
-    async def list_documents(self, db: AsyncSession) -> list[Document]:
-        result = await db.execute(select(Document).order_by(Document.created_at.desc()))
+    async def list_documents(
+        self, db: AsyncSession, user_id: Optional[int] = None
+    ) -> list[Document]:
+        q = select(Document).order_by(Document.created_at.desc())
+        if user_id is not None:
+            q = q.where(Document.user_id == user_id)
+        result = await db.execute(q)
         return list(result.scalars().all())
 
-    async def delete_document(self, db: AsyncSession, document_id: str) -> bool:
-        doc = await self.get_document(db, document_id)
+    async def delete_document(
+        self, db: AsyncSession, document_id: str, user_id: Optional[int] = None
+    ) -> bool:
+        doc = await self.get_document(db, document_id, user_id=user_id)
         if not doc:
             return False
 
-        # Remove from vector store
         try:
             pipeline = get_pipeline()
             pipeline.vector_store.delete_document(document_id)

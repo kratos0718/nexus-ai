@@ -310,17 +310,22 @@ A: In FastAPI tests, use `app.dependency_overrides` to inject a mock user direct
 
 ---
 
-## SECTION 7: SYSTEM DESIGN (Q96–Q100)
+## SECTION 7: FRONTEND & FULL STACK (Q96–Q100)
 
-*[To be completed on Day 23-25]*
+**Q96. What is the difference between Next.js Pages Router and App Router?**
+A: Pages Router uses `pages/` directory, all components are client-side by default, uses `getServerSideProps`/`getStaticProps` for data. App Router uses `app/` directory, components are Server Components by default (can be async, no useEffect for data), uses nested layouts, and has built-in streaming via Suspense. App Router is the current standard — use it for new projects.
 
----
+**Q97. What is multi-tenancy and how do you implement it at the data layer?**
+A: Multi-tenancy = multiple users share one codebase and database but see only their own data. Implementation: add `user_id FK` to every user-owned table, then always filter queries with `WHERE user_id = current_user.id`. Never fetch data without the user filter — even 404s should be returned instead of 403s (don't reveal that other users' resources exist). At the vector store layer: use `document_id` as the metadata filter so RAG retrieval is also scoped per user.
 
-## SECTION 7: SYSTEM DESIGN (Q96–Q100)
+**Q98. Why use Axios interceptors instead of adding the auth header manually?**
+A: Interceptors run automatically on every request — you can't forget to add the header to a new endpoint. The response interceptor handles the 401 → refresh → retry flow in one place rather than duplicating it across every API call. Without interceptors, every API call would need try/catch → check 401 → call refresh → retry, which is 10+ lines of repetition per call.
 
-*[To be completed on Day 23-25]*
+**Q99. What is hydration in React/Next.js and what causes hydration errors?**
+A: Hydration = React attaches event listeners and state to server-rendered HTML, making it interactive. Hydration errors occur when the client-rendered output doesn't match server HTML: (1) Using `localStorage` or `window` during render — these don't exist server-side. (2) Rendering random values (Math.random(), Date.now()) — different on server and client. (3) Conditional rendering based on browser state. Fix: wrap browser-only code in `useEffect` (runs only client-side) or check `typeof window !== "undefined"`.
 
----
+**Q100. How does `fetch` streaming work in the browser compared to Axios?**
+A: Axios buffers the full response body before resolving the promise — useless for streaming. `fetch` returns a `ReadableStream` via `res.body.getReader()`. You call `reader.read()` in a loop — each call resolves with `{ done, value }` where `value` is a `Uint8Array` chunk. Decode with `TextDecoder({ stream: true })` (the `stream: true` flag handles multi-byte UTF-8 chars split across chunks). Parse SSE format from the decoded string. This gives true token-by-token streaming with ~50ms latency from the LLM to the browser.
 
 ## "TELL ME ABOUT YOUR PROJECT" — 3 VERSIONS
 

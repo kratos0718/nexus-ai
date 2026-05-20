@@ -3,20 +3,20 @@ Document management endpoints.
 
 POST   /documents/upload       — upload a file, triggers background indexing
 POST   /documents/url          — index a web URL
-GET    /documents/             — list all documents with status
+GET    /documents/             — list documents owned by current user
 GET    /documents/{id}/status  — get one document's status
 DELETE /documents/{id}         — delete document from DB + vector store
 """
 
-import os
 import uuid
-import shutil
 from pathlib import Path
 
 from fastapi import APIRouter, UploadFile, File, BackgroundTasks, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
+from app.core.dependencies import get_current_user
+from app.models.user import User
 from app.services.rag_service import rag_service
 from app.schemas.document import (
     DocumentUploadResponse,
@@ -39,14 +39,12 @@ async def upload_document(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """
     Upload a document and begin background indexing.
-
-    Returns 202 Accepted immediately — indexing runs in background.
-    Poll GET /documents/{id}/status to check when status becomes "ready".
+    Returns 202 immediately — poll GET /documents/{id}/status for progress.
     """
-    # Validate file extension
     suffix = Path(file.filename).suffix.lower()
     if suffix not in ALLOWED_EXTENSIONS:
         raise HTTPException(
@@ -54,7 +52,6 @@ async def upload_document(
             detail=f"File type '{suffix}' not supported. Allowed: {ALLOWED_EXTENSIONS}",
         )
 
-    # Check file size (read in chunks to avoid loading entire file into memory)
     file_bytes = await file.read()
     if len(file_bytes) > MAX_FILE_SIZE:
         raise HTTPException(
@@ -62,21 +59,19 @@ async def upload_document(
             detail=f"File too large. Max size: {MAX_FILE_SIZE // 1024 // 1024}MB",
         )
 
-    # Save to temp location for background task to process
     document_id = str(uuid.uuid4())
     temp_path = UPLOAD_DIR / f"{document_id}{suffix}"
     temp_path.write_bytes(file_bytes)
 
-    # Create DB record (status=PENDING)
     await rag_service.create_document_record(
         db=db,
         document_id=document_id,
         filename=file.filename,
         source_type=suffix.lstrip("."),
+        user_id=current_user.id,
         file_size_bytes=len(file_bytes),
     )
 
-    # Queue background indexing — does NOT block the HTTP response
     background_tasks.add_task(
         rag_service.index_file_background,
         file_path=str(temp_path),
@@ -98,6 +93,7 @@ async def index_url(
     request: URLIndexRequest,
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """Index content from a web URL."""
     document_id = str(uuid.uuid4())
@@ -108,6 +104,7 @@ async def index_url(
         document_id=document_id,
         filename=display_name,
         source_type="url",
+        user_id=current_user.id,
     )
 
     background_tasks.add_task(
@@ -126,9 +123,12 @@ async def index_url(
 
 
 @router.get("/", response_model=DocumentListResponse)
-async def list_documents(db: AsyncSession = Depends(get_db)):
-    """List all documents with their indexing status."""
-    docs = await rag_service.list_documents(db)
+async def list_documents(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """List documents belonging to the current user."""
+    docs = await rag_service.list_documents(db, user_id=current_user.id)
     return DocumentListResponse(
         documents=[DocumentStatusResponse.model_validate(d) for d in docs],
         total=len(docs),
@@ -136,17 +136,25 @@ async def list_documents(db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/{document_id}/status", response_model=DocumentStatusResponse)
-async def get_document_status(document_id: str, db: AsyncSession = Depends(get_db)):
-    """Get the indexing status of a specific document."""
-    doc = await rag_service.get_document(db, document_id)
+async def get_document_status(
+    document_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Get the indexing status of a document owned by the current user."""
+    doc = await rag_service.get_document(db, document_id, user_id=current_user.id)
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
     return DocumentStatusResponse.model_validate(doc)
 
 
 @router.delete("/{document_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_document(document_id: str, db: AsyncSession = Depends(get_db)):
-    """Delete a document from both the database and vector store."""
-    deleted = await rag_service.delete_document(db, document_id)
+async def delete_document(
+    document_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Delete a document owned by the current user."""
+    deleted = await rag_service.delete_document(db, document_id, user_id=current_user.id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Document not found")

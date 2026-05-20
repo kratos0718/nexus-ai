@@ -4,7 +4,7 @@ Maps the `documents` table — tracks every file uploaded by every user.
 """
 
 from datetime import datetime, UTC
-from sqlalchemy import String, Integer, DateTime, Text, Enum as SAEnum
+from sqlalchemy import String, Integer, DateTime, Text, Enum as SAEnum, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column
 import enum
 
@@ -23,6 +23,7 @@ class Document(Base):
 
     id: Mapped[int]                  = mapped_column(Integer, primary_key=True, autoincrement=True)
     document_id: Mapped[str]         = mapped_column(String(36), unique=True, index=True)   # UUID
+    user_id: Mapped[int | None]      = mapped_column(Integer, ForeignKey("users.id"), nullable=True, index=True)
     filename: Mapped[str]            = mapped_column(String(255))
     source_type: Mapped[str]         = mapped_column(String(20))     # "pdf" | "txt" | "url" | etc.
     status: Mapped[DocumentStatus]   = mapped_column(SAEnum(DocumentStatus), default=DocumentStatus.PENDING)
