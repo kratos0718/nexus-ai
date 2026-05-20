@@ -94,6 +94,23 @@ HuggingFace · sentence-transformers · SQLAlchemy · JWT · WebSockets · RAGAS
   (RAGService) enabling independent testing and multi-channel invocation
 ```
 
+### Day 6 additions
+```
+• Designed LangGraph multi-agent system with router → [planner → researcher |
+  direct RAG] → synthesizer topology; router uses LLM to classify query
+  complexity and routes to appropriate retrieval path automatically
+
+• Implemented query decomposition pipeline: planner agent breaks complex
+  questions into 2-4 sub-questions; researcher agent retrieves and deduplicates
+  context across all sub-questions before synthesis
+
+• Streamed agent step progress via custom SSE protocol ([STEP], [ROUTE], [PLAN],
+  [CONTEXT] events) so users see router decisions and sub-questions in real-time
+
+• Built agent mode toggle in chat UI with visual step indicator, routing badge,
+  and sub-question display — makes AI reasoning transparent to end users
+```
+
 ### Day 5 additions
 ```
 • Built full-stack Next.js 16 frontend (App Router, TypeScript, Tailwind) with

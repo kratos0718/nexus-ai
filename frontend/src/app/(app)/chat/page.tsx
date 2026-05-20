@@ -5,7 +5,7 @@ import type { ChatMessage, Document, SourceReference, Conversation } from "@/typ
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
 
-// ── Rendering helpers ───────────────────────────────────────────────────────
+// ── Helpers ─────────────────────────────────────────────────────────────────
 
 function SourceCard({ source }: { source: SourceReference }) {
   return (
@@ -20,7 +20,50 @@ function SourceCard({ source }: { source: SourceReference }) {
   );
 }
 
-function MessageBubble({ msg }: { msg: ChatMessage }) {
+interface AgentMeta {
+  route?: string;
+  subQuestions?: string[];
+  contextChunks?: number;
+  steps?: string[];
+}
+
+function AgentBadge({ meta }: { meta: AgentMeta }) {
+  if (!meta.route) return null;
+  return (
+    <div className="flex flex-col gap-1 mt-2 mb-1">
+      <div className="flex flex-wrap gap-1.5 items-center">
+        <span
+          className="text-xs px-2 py-0.5 rounded-full font-medium"
+          style={{
+            background: meta.route === "complex" ? "#6366f11a" : "#10b9811a",
+            color: meta.route === "complex" ? "var(--accent)" : "var(--success)",
+          }}
+        >
+          {meta.route === "complex" ? "⚡ Multi-step" : "⚡ Direct RAG"}
+        </span>
+        {meta.contextChunks !== undefined && (
+          <span className="text-xs" style={{ color: "var(--text-muted)" }}>
+            {meta.contextChunks} chunks
+          </span>
+        )}
+      </div>
+      {meta.subQuestions && meta.subQuestions.length > 0 && (
+        <div className="flex flex-col gap-0.5 mt-1">
+          <span className="text-xs font-medium" style={{ color: "var(--text-muted)" }}>
+            Sub-questions:
+          </span>
+          {meta.subQuestions.map((q, i) => (
+            <span key={i} className="text-xs pl-2" style={{ color: "var(--text-muted)" }}>
+              • {q}
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MessageBubble({ msg, agentMeta }: { msg: ChatMessage; agentMeta?: AgentMeta }) {
   const isUser = msg.role === "user";
   return (
     <div className={`flex ${isUser ? "justify-end" : "justify-start"} mb-4`}>
@@ -33,21 +76,28 @@ function MessageBubble({ msg }: { msg: ChatMessage }) {
         </div>
       )}
       <div className={`max-w-[75%] flex flex-col ${isUser ? "items-end" : "items-start"}`}>
+        {!isUser && agentMeta?.route && <AgentBadge meta={agentMeta} />}
         <div
-          className="px-4 py-3 rounded-2xl text-sm leading-relaxed prose"
+          className="px-4 py-3 rounded-2xl text-sm leading-relaxed"
           style={{
             background: isUser ? "var(--accent)" : "var(--surface)",
             color: isUser ? "#fff" : "var(--text)",
             borderRadius: isUser ? "18px 18px 4px 18px" : "18px 18px 18px 4px",
+            whiteSpace: "pre-wrap",
           }}
         >
           {msg.streaming ? (
             <span>
               {msg.content}
-              <span className="inline-block w-0.5 h-4 ml-0.5 align-middle animate-pulse" style={{ background: "var(--accent)" }} />
+              <span
+                className="inline-block w-0.5 h-4 ml-0.5 align-middle animate-pulse"
+                style={{ background: "var(--accent)" }}
+              />
             </span>
           ) : (
-            msg.content
+            msg.content || (
+              <span style={{ color: "var(--text-muted)", fontStyle: "italic" }}>Thinking…</span>
+            )
           )}
         </div>
         {msg.sources && msg.sources.length > 0 && (
@@ -62,20 +112,41 @@ function MessageBubble({ msg }: { msg: ChatMessage }) {
   );
 }
 
-// ── Main page ───────────────────────────────────────────────────────────────
+// ── Step indicator shown while agent runs ────────────────────────────────────
+
+function StepIndicator({ steps }: { steps: string[] }) {
+  if (steps.length === 0) return null;
+  const labels: Record<string, string> = {
+    router: "Classifying query…",
+    planner: "Planning sub-questions…",
+    researcher: "Researching…",
+    rag: "Retrieving context…",
+    synthesizer: "Generating answer…",
+  };
+  return (
+    <div className="flex items-center gap-2 text-xs px-4 mb-2" style={{ color: "var(--text-muted)" }}>
+      <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: "var(--accent)" }} />
+      {labels[steps[steps.length - 1]] || steps[steps.length - 1]}
+    </div>
+  );
+}
+
+// ── Main page ────────────────────────────────────────────────────────────────
 
 export default function ChatPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [agentMetas, setAgentMetas] = useState<Record<string, AgentMeta>>({});
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
+  const [steps, setSteps] = useState<string[]>([]);
   const [docs, setDocs] = useState<Document[]>([]);
-  const [selectedDoc, setSelectedDoc] = useState<string>("");
+  const [selectedDoc, setSelectedDoc] = useState("");
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeConvId, setActiveConvId] = useState<string | null>(null);
+  const [agentMode, setAgentMode] = useState(true);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  // Fetch ready documents and conversations on mount
   useEffect(() => {
     api.get<{ documents: Document[] }>("/documents/").then(({ data }) =>
       setDocs(data.documents.filter((d) => d.status === "ready"))
@@ -87,7 +158,7 @@ export default function ChatPage() {
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+  }, [messages, steps]);
 
   async function loadConversation(convId: string) {
     const { data } = await api.get<Conversation>(`/conversations/${convId}`);
@@ -101,31 +172,20 @@ export default function ChatPage() {
     );
   }
 
-  async function newConversation() {
-    setActiveConvId(null);
-    setMessages([]);
-  }
-
   async function send() {
     const question = input.trim();
     if (!question || sending) return;
-
     setInput("");
     setSending(true);
+    setSteps([]);
 
-    // Add user message immediately
     const userMsg: ChatMessage = { id: crypto.randomUUID(), role: "user", content: question };
     setMessages((m) => [...m, userMsg]);
 
-    // Placeholder assistant message that will stream into
     const assistantId = crypto.randomUUID();
-    setMessages((m) => [
-      ...m,
-      { id: assistantId, role: "assistant", content: "", streaming: true },
-    ]);
+    setMessages((m) => [...m, { id: assistantId, role: "assistant", content: "", streaming: true }]);
 
     try {
-      // If no conversation yet, create one
       let convId = activeConvId;
       if (!convId) {
         const { data } = await api.post<Conversation>("/conversations/", {
@@ -137,9 +197,9 @@ export default function ChatPage() {
         setConversations((c) => [data, ...c]);
       }
 
-      // Stream the response
+      const endpoint = agentMode ? "agent/stream" : "chat/stream";
       const token = localStorage.getItem("access_token");
-      const res = await fetch(`${BASE_URL}/chat/stream`, {
+      const res = await fetch(`${BASE_URL}/${endpoint}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -158,23 +218,30 @@ export default function ChatPage() {
       const decoder = new TextDecoder();
       let accumulated = "";
       let sources: SourceReference[] = [];
+      const meta: AgentMeta = {};
 
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
-
         const text = decoder.decode(value, { stream: true });
-        // Each SSE event: "data: <content>\n\n"
-        const lines = text.split("\n");
-        for (const line of lines) {
+
+        for (const line of text.split("\n")) {
           if (!line.startsWith("data: ")) continue;
           const payload = line.slice(6);
 
           if (payload === "[DONE]") break;
-
           if (payload.startsWith("[SOURCES]")) {
             sources = JSON.parse(payload.slice(9));
-          } else {
+          } else if (payload.startsWith("[STEP]")) {
+            const step = payload.slice(6);
+            setSteps((s) => [...s, step]);
+          } else if (payload.startsWith("[ROUTE]")) {
+            meta.route = payload.slice(7);
+          } else if (payload.startsWith("[PLAN]")) {
+            meta.subQuestions = JSON.parse(payload.slice(6));
+          } else if (payload.startsWith("[CONTEXT]")) {
+            meta.contextChunks = parseInt(payload.slice(9));
+          } else if (!payload.startsWith("[")) {
             accumulated += payload;
             setMessages((msgs) =>
               msgs.map((m) =>
@@ -185,15 +252,15 @@ export default function ChatPage() {
         }
       }
 
-      // Finalise: mark not streaming, attach sources
       setMessages((msgs) =>
         msgs.map((m) =>
-          m.id === assistantId
-            ? { ...m, content: accumulated, streaming: false, sources }
-            : m
+          m.id === assistantId ? { ...m, content: accumulated, streaming: false, sources } : m
         )
       );
-    } catch (err) {
+      if (agentMode) {
+        setAgentMetas((prev) => ({ ...prev, [assistantId]: meta }));
+      }
+    } catch {
       setMessages((msgs) =>
         msgs.map((m) =>
           m.id === assistantId
@@ -203,6 +270,7 @@ export default function ChatPage() {
       );
     } finally {
       setSending(false);
+      setSteps([]);
       inputRef.current?.focus();
     }
   }
@@ -216,15 +284,15 @@ export default function ChatPage() {
 
   return (
     <div className="flex h-full">
-      {/* Conversation list sidebar */}
+      {/* Conversation sidebar */}
       <div
         className="w-52 flex-shrink-0 flex flex-col border-r overflow-y-auto"
         style={{ background: "var(--surface)", borderColor: "var(--border)" }}
       >
         <div className="p-3 border-b" style={{ borderColor: "var(--border)" }}>
           <button
-            onClick={newConversation}
-            className="w-full py-1.5 rounded-lg text-xs font-medium border transition-colors"
+            onClick={() => { setActiveConvId(null); setMessages([]); setAgentMetas({}); }}
+            className="w-full py-1.5 rounded-lg text-xs font-medium border"
             style={{ borderColor: "var(--border)", color: "var(--text-muted)" }}
           >
             + New chat
@@ -235,7 +303,7 @@ export default function ChatPage() {
             <button
               key={c.conversation_id}
               onClick={() => loadConversation(c.conversation_id)}
-              className="text-left w-full px-2 py-2 rounded-lg text-xs truncate transition-colors"
+              className="text-left w-full px-2 py-2 rounded-lg text-xs truncate"
               style={{
                 background: activeConvId === c.conversation_id ? "var(--surface-2)" : "transparent",
                 color: activeConvId === c.conversation_id ? "var(--text)" : "var(--text-muted)",
@@ -247,33 +315,43 @@ export default function ChatPage() {
         </div>
       </div>
 
-      {/* Main chat area */}
+      {/* Main chat */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Toolbar */}
         <div
-          className="px-4 py-2.5 border-b flex items-center gap-3"
+          className="px-4 py-2.5 border-b flex items-center gap-3 flex-wrap"
           style={{ borderColor: "var(--border)", background: "var(--surface)" }}
         >
           <select
             value={selectedDoc}
             onChange={(e) => setSelectedDoc(e.target.value)}
-            className="text-xs px-2 py-1.5 rounded-lg border outline-none max-w-xs"
-            style={{
-              background: "var(--surface-2)",
-              borderColor: "var(--border)",
-              color: "var(--text)",
-            }}
+            className="text-xs px-2 py-1.5 rounded-lg border outline-none"
+            style={{ background: "var(--surface-2)", borderColor: "var(--border)", color: "var(--text)" }}
           >
             <option value="">All documents</option>
             {docs.map((d) => (
-              <option key={d.document_id} value={d.document_id}>
-                {d.filename}
-              </option>
+              <option key={d.document_id} value={d.document_id}>{d.filename}</option>
             ))}
           </select>
-          <span className="text-xs" style={{ color: "var(--text-muted)" }}>
-            {selectedDoc ? "Searching selected doc only" : "Searching all documents"}
-          </span>
+
+          {/* Agent mode toggle */}
+          <button
+            onClick={() => setAgentMode((a) => !a)}
+            className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border transition-colors"
+            style={{
+              borderColor: agentMode ? "var(--accent)" : "var(--border)",
+              background: agentMode ? "#6366f11a" : "transparent",
+              color: agentMode ? "var(--accent)" : "var(--text-muted)",
+            }}
+          >
+            ⚡ {agentMode ? "Agent mode ON" : "Agent mode OFF"}
+          </button>
+
+          {agentMode && (
+            <span className="text-xs" style={{ color: "var(--text-muted)" }}>
+              Routes simple vs complex queries automatically
+            </span>
+          )}
         </div>
 
         {/* Messages */}
@@ -285,13 +363,20 @@ export default function ChatPage() {
                 Ask your knowledge base
               </p>
               <p className="text-sm" style={{ color: "var(--text-muted)" }}>
-                Upload documents first, then ask questions and get cited answers
+                {agentMode
+                  ? "Agent mode: complex questions are automatically decomposed"
+                  : "Direct RAG mode"}
               </p>
             </div>
           )}
           {messages.map((msg) => (
-            <MessageBubble key={msg.id} msg={msg} />
+            <MessageBubble
+              key={msg.id}
+              msg={msg}
+              agentMeta={agentMetas[msg.id]}
+            />
           ))}
+          <StepIndicator steps={steps} />
           <div ref={bottomRef} />
         </div>
 
@@ -310,7 +395,7 @@ export default function ChatPage() {
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
               rows={1}
-              placeholder="Ask a question… (Enter to send, Shift+Enter for newline)"
+              placeholder="Ask a question… (Enter to send)"
               disabled={sending}
               className="flex-1 resize-none bg-transparent outline-none text-sm"
               style={{ color: "var(--text)", maxHeight: "120px" }}
