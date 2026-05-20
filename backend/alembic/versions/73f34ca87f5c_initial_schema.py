@@ -63,19 +63,31 @@ def upgrade() -> None:
     )
     op.create_index('ix_messages_message_id', 'messages', ['message_id'], unique=True)
 
-    # ── Alter existing documents table — use batch for SQLite compat ─────────
-    # batch_alter_table uses copy-and-move on SQLite, ALTER TABLE on PostgreSQL
-    with op.batch_alter_table('documents') as batch_op:
-        batch_op.add_column(sa.Column('user_id', sa.Integer(), nullable=True))
-        batch_op.create_index('ix_documents_user_id', ['user_id'], unique=False)
-        batch_op.create_foreign_key('fk_documents_user_id', 'users', ['user_id'], ['id'])
+    # ── Documents table (includes user_id FK from the start) ─────────────────
+    op.create_table(
+        'documents',
+        sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
+        sa.Column('document_id', sa.String(length=36), nullable=False),
+        sa.Column('user_id', sa.Integer(), nullable=True),
+        sa.Column('filename', sa.String(length=255), nullable=False),
+        sa.Column('source_type', sa.String(length=20), nullable=False),
+        sa.Column('status', sa.Enum('pending', 'processing', 'ready', 'failed', name='documentstatus'), nullable=False),
+        sa.Column('chunks_count', sa.Integer(), nullable=False),
+        sa.Column('file_size_bytes', sa.Integer(), nullable=False),
+        sa.Column('error_message', sa.Text(), nullable=True),
+        sa.Column('created_at', sa.DateTime(), nullable=False),
+        sa.Column('updated_at', sa.DateTime(), nullable=False),
+        sa.ForeignKeyConstraint(['user_id'], ['users.id']),
+        sa.PrimaryKeyConstraint('id'),
+    )
+    op.create_index('ix_documents_document_id', 'documents', ['document_id'], unique=True)
+    op.create_index('ix_documents_user_id', 'documents', ['user_id'], unique=False)
 
 
 def downgrade() -> None:
-    with op.batch_alter_table('documents') as batch_op:
-        batch_op.drop_constraint('fk_documents_user_id', type_='foreignkey')
-        batch_op.drop_index('ix_documents_user_id')
-        batch_op.drop_column('user_id')
+    op.drop_index('ix_documents_user_id', table_name='documents')
+    op.drop_index('ix_documents_document_id', table_name='documents')
+    op.drop_table('documents')
 
     op.drop_index('ix_messages_message_id', table_name='messages')
     op.drop_table('messages')
