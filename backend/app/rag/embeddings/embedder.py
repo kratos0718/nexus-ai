@@ -100,34 +100,41 @@ class OpenAIEmbedder(BaseEmbedder):
         return self._dim
 
 
-# ── Cohere (cloud, free tier) ─────────────────────────────────────────────────
+# ── HuggingFace Inference API (cloud, free) ───────────────────────────────────
 
-class CohereEmbedder(BaseEmbedder):
+class HuggingFaceAPIEmbedder(BaseEmbedder):
     """
-    Calls Cohere embeddings API — free tier, no credit card.
-    Model: embed-english-v3.0 — 1024-dim, sign up at cohere.com.
-    Use for Vercel/cloud deployment.
+    Calls HuggingFace Inference API — completely free, just need HF account.
+    Same model as local (all-MiniLM-L6-v2), same 384 dimensions.
+    Use for Vercel/cloud deployment instead of running the model locally.
     """
 
-    def __init__(self, api_key: str, model: str = "embed-english-v3.0"):
-        import cohere
-        self._client = cohere.Client(api_key)
-        self._model = model
+    _API_BASE = "https://api-inference.huggingface.co/pipeline/feature-extraction"
+
+    def __init__(self, api_key: str, model: str = "sentence-transformers/all-MiniLM-L6-v2"):
+        import requests as req
+        self._requests = req
+        self._headers = {"Authorization": f"Bearer {api_key}"}
+        self._url = f"{self._API_BASE}/{model}"
         self._model_name = model
-        self._dim = 1024
-        logger.info(f"Cohere embedder ready: model={model} dim={self._dim}")
+        self._dim = 384
+        logger.info(f"HuggingFace API embedder ready: {model}")
+
+    def _call(self, inputs) -> list:
+        resp = self._requests.post(
+            self._url,
+            headers=self._headers,
+            json={"inputs": inputs, "options": {"wait_for_model": True}},
+            timeout=30,
+        )
+        resp.raise_for_status()
+        return resp.json()
 
     def embed_text(self, text: str) -> List[float]:
-        resp = self._client.embed(
-            texts=[text], model=self._model, input_type="search_query"
-        )
-        return list(resp.embeddings[0])
+        return self._call(text)
 
     def embed_batch(self, texts: List[str]) -> List[List[float]]:
-        resp = self._client.embed(
-            texts=texts, model=self._model, input_type="search_document"
-        )
-        return [list(e) for e in resp.embeddings]
+        return self._call(texts)
 
     @property
     def dimension(self) -> int:
@@ -143,13 +150,13 @@ def get_embedder(
 ) -> BaseEmbedder:
     if provider == "huggingface":
         return HuggingFaceEmbedder(model_name=model_name or "all-MiniLM-L6-v2")
+    elif provider == "huggingface-api":
+        if not api_key:
+            raise ValueError("HF_API_KEY required when EMBEDDING_PROVIDER=huggingface-api")
+        return HuggingFaceAPIEmbedder(api_key=api_key, model=model_name or "sentence-transformers/all-MiniLM-L6-v2")
     elif provider == "openai":
         if not api_key:
             raise ValueError("OPENAI_API_KEY required when EMBEDDING_PROVIDER=openai")
         return OpenAIEmbedder(api_key=api_key, model=model_name or "text-embedding-3-small")
-    elif provider == "cohere":
-        if not api_key:
-            raise ValueError("COHERE_API_KEY required when EMBEDDING_PROVIDER=cohere")
-        return CohereEmbedder(api_key=api_key, model=model_name or "embed-english-v3.0")
     else:
-        raise ValueError(f"Unknown embedding provider: {provider}. Supported: huggingface, openai, cohere")
+        raise ValueError(f"Unknown embedding provider: {provider}. Supported: huggingface, huggingface-api, openai")
