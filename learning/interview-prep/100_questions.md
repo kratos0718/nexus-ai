@@ -167,7 +167,54 @@ RAG: retrieval from external storage, no model modification, always up to date, 
 
 ---
 
-## SECTION 4: AGENTS & LANGCHAIN (Q51–Q65)
+## SECTION 4: CHUNKING, HYBRID SEARCH, RERANKING (Q51–Q65)
+
+**Q51. What is chunking and why is it necessary?**  
+A: Chunking splits documents into smaller pieces before embedding. Necessary because: (1) embedding models have token limits (~512 for MiniLM), (2) embedding a whole document averages all content into one vector — losing specificity, (3) focused chunks produce precise retrieval — "vacation days" query matches the vacation-days chunk, not a whole-document vector that also contains gratuity, sick leave, and WFH policy.
+
+**Q52. Compare fixed vs recursive vs semantic chunking.**  
+A: Fixed: splits every N chars, fast, can cut mid-sentence. Recursive: splits at paragraph → sentence → word boundaries, respects text structure, LangChain default. Semantic: splits where embedding similarity between consecutive sentences drops sharply (topic change), most coherent but 10-50x slower (requires embedding every sentence during indexing). Default: recursive. Use semantic for long multi-topic documents where index build time is acceptable.
+
+**Q53. What chunk size and overlap would you use in production?**  
+A: 800–1000 chars with 150–200 overlap as a starting point with recursive splitting. Then evaluate: if RAGAS Context Precision is low, reduce size (retrieving noise). If Context Recall is low, increase size or overlap (missing answers). Overlap of 15-20% of chunk size prevents information loss at boundaries.
+
+**Q54. Why use overlap between chunks?**  
+A: A sentence split across two chunks loses its context in both. Overlap means consecutive chunks share ~150-200 chars of text, so a sentence at a boundary appears in full in at least one chunk. Costs ~15-20% extra storage but prevents retrieval failures for information at chunk edges.
+
+**Q55. What is BM25?**  
+A: Best Match 25 — a classic keyword ranking algorithm. Scores documents by: how rare the query terms are across the corpus (IDF), how often they appear in the document (TF), with length normalization (shorter docs with same TF rank higher). Key addition over simple TF-IDF: a saturation function prevents a term appearing 100x from dominating over 10x appearances.
+
+**Q56. What is the difference between dense and sparse retrieval?**  
+A: Dense: text → fixed-size float vector where ALL dimensions have values. Semantic similarity via cosine distance. Captures meaning. Sparse: text → very high-dimensional vector where MOST values are 0 (only vocabulary words present are non-zero). Keyword matching via inverted index. Dense wins on semantic queries; sparse wins on exact keyword/ID queries. Hybrid uses both.
+
+**Q57. What is Reciprocal Rank Fusion?**  
+A: A score-free method to merge multiple ranked lists. Score = Σ(weight / (k + rank)). Uses rank instead of score because BM25 scores and cosine similarities are not on the same scale and can't be directly combined. k=60 prevents the top rank from overwhelming contributions from lower-rank positions. Empirically outperforms weighted score combination.
+
+**Q58. What is a bi-encoder vs cross-encoder?**  
+A: Bi-encoder: encodes query and document separately → compare vectors → fast (pre-compute doc vectors offline), less accurate. Cross-encoder: encodes (query + document) together → direct relevance score → slow (can't pre-compute), much more accurate. Use bi-encoder for retrieval (milliseconds), cross-encoder for reranking a small candidate set (seconds).
+
+**Q59. Why rerank instead of just taking bi-encoder top-K?**  
+A: Bi-encoder similarity is a proxy for relevance, not a direct measurement. The model sees query and document in isolation — it can't detect subtle relevance signals. Cross-encoder sees both together and scores their direct interaction. In our test: bi-encoder placed the correct chunk at rank 1 (score 0.496), but also placed Maternity Leave at rank 2 (score 0.358). Cross-encoder correctly gave Annual Leave +3.17 and Maternity Leave -5.55, clearly separating relevant from irrelevant.
+
+**Q60. What cross-encoder model do you use and why?**  
+A: cross-encoder/ms-marco-MiniLM-L-6-v2 — fine-tuned on MS MARCO (millions of Bing search query-passage-relevance triplets). Small enough for CPU inference (~200ms for 20 pairs). MiniLM architecture balances accuracy and speed. Alternative: Cohere Rerank API for production at scale (managed, multilingual, no self-hosting).
+
+**Q61. How do you load PDFs for RAG?**  
+A: PyPDF extracts text page by page. Each page becomes a `RawDocument` with metadata (filename, page number). Then chunk each page. Challenges: scanned PDFs have no text (need OCR — pytesseract or AWS Textract), tables lose structure (convert to natural language), multi-column layouts extract in wrong order (use layout-aware parsers like unstructured or PDFMiner).
+
+**Q62. How do you handle web URLs as document sources?**  
+A: requests.get() to fetch HTML, BeautifulSoup to parse and remove noise tags (script, style, nav, footer), get_text() to extract readable text. Clean multiple whitespace/newlines. Store the URL and page title as metadata. Challenge: JavaScript-rendered pages need Playwright or Selenium to execute JS before scraping.
+
+**Q63. What is the ChromaDB embedded mode and when do you use it?**  
+A: ChromaDB PersistentClient runs in-process and stores data to disk. No separate server needed, no Docker. Perfect for development, testing, and small deployments. Limitation: single-process only (can't scale horizontally). Production: switch to ChromaDB HTTP server or Pinecone — same Python API, different client initialization.
+
+**Q64. What happens if a document is updated — how do you re-index it?**  
+A: Delete old chunks by document_id (vector_store.delete_document(doc_id)), then re-ingest the updated file with the same document_id. The chunk IDs are deterministic (doc_id + chunk_index) so upsert is idempotent. For large collections, don't rebuild BM25 on every insert — batch updates and rebuild periodically.
+
+**Q65. How would you handle a 500-page PDF?**  
+A: Load page by page (PyPDF), chunk each page independently (avoids one massive chunk list), embed in batches of 32-64 (GPU memory efficient), upsert to vector DB in batches of 100. Use Celery to run this as a background task — don't block the HTTP response. Show a progress indicator to the user. Expected time: ~2-5 minutes for 500 pages on CPU, ~30 seconds on GPU.
+
+## SECTION 5: AGENTS & LANGCHAIN (Q66–Q80)
 
 *[To be completed on Day 6-10]*
 

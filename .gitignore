@@ -28,6 +28,7 @@ build/
 # Vector DB data (large, regeneratable)
 chroma_data/
 uploads/
+backend/chroma_data/
 
 # Node.js / Frontend
 node_modules/
