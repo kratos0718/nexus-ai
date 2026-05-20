@@ -1,7 +1,10 @@
 """
 Embedding engine with provider abstraction.
 
-Supports HuggingFace sentence-transformers (local, free) and OpenAI (cloud).
+Supports:
+  - HuggingFace sentence-transformers (local, free, runs on CPU)
+  - OpenAI text-embedding-3-small (cloud, requires API key, used on Vercel)
+
 Swapping providers requires zero changes in the calling code.
 """
 
@@ -11,90 +14,109 @@ import numpy as np
 from loguru import logger
 
 
-# ── Abstract Base: defines the CONTRACT ───────────────────────────────
-# Any embedding provider (HuggingFace, OpenAI, Cohere) must implement this
 class BaseEmbedder(ABC):
 
     @abstractmethod
     def embed_text(self, text: str) -> List[float]:
-        """Convert a single text string to an embedding vector."""
         pass
 
     @abstractmethod
     def embed_batch(self, texts: List[str]) -> List[List[float]]:
-        """Convert multiple texts to embeddings (more efficient than one-by-one)."""
         pass
 
     @property
     @abstractmethod
     def dimension(self) -> int:
-        """Number of dimensions in the output vector."""
         pass
 
     def cosine_similarity(self, vec1: List[float], vec2: List[float]) -> float:
-        """
-        Compute cosine similarity between two vectors.
-        Returns a value between -1 (opposite) and 1 (identical).
-
-        Formula: cos(θ) = (A · B) / (|A| × |B|)
-        We only care about direction (meaning), not magnitude (length of text).
-        """
         a = np.array(vec1)
         b = np.array(vec2)
         return float(np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b)))
 
 
-# ── HuggingFace Embedder (FREE, runs locally) ─────────────────────────
+# ── HuggingFace (local, free) ─────────────────────────────────────────────────
+
 class HuggingFaceEmbedder(BaseEmbedder):
     """
-    Uses sentence-transformers library to generate embeddings locally.
-    No API key needed. Runs on your CPU/GPU.
-
-    Model: all-MiniLM-L6-v2
-    - Dimension: 384
-    - Speed: ~14,000 sentences/second on CPU
-    - Size: ~80MB download (cached after first use)
-    - Quality: excellent for semantic search tasks
+    Runs sentence-transformers locally — no API key, no cost.
+    Model: all-MiniLM-L6-v2 — 384-dim, ~80MB download, cached after first use.
+    Use for local development.
     """
 
     def __init__(self, model_name: str = "all-MiniLM-L6-v2"):
-        logger.info(f"Loading embedding model: {model_name}")
-        # Import here to avoid slow startup if not using HuggingFace
+        logger.info(f"Loading local embedding model: {model_name}")
         from sentence_transformers import SentenceTransformer
         self._model = SentenceTransformer(model_name)
         self._model_name = model_name
-        logger.info(f"Embedding model loaded. Dimension: {self.dimension}")
+        logger.info(f"Local embedding model ready. Dimension: {self.dimension}")
 
     def embed_text(self, text: str) -> List[float]:
-        """Embed a single piece of text."""
-        vector = self._model.encode(text, convert_to_numpy=True)
-        return vector.tolist()
+        return self._model.encode(text, convert_to_numpy=True).tolist()
 
     def embed_batch(self, texts: List[str]) -> List[List[float]]:
-        """
-        Embed multiple texts at once.
-        WHY BATCH? Much faster than embedding one-by-one.
-        The model processes multiple inputs in parallel on the GPU/CPU.
-        """
-        vectors = self._model.encode(texts, convert_to_numpy=True, batch_size=32)
-        return vectors.tolist()
+        return self._model.encode(texts, convert_to_numpy=True, batch_size=32).tolist()
 
     @property
     def dimension(self) -> int:
         return self._model.get_embedding_dimension()
 
 
-# ── Factory Function: creates the right embedder from config ──────────
-def get_embedder(provider: str = "huggingface", model_name: str = None) -> BaseEmbedder:
-    """
-    Factory pattern: return the right embedder based on configuration.
+# ── OpenAI (cloud, requires key) ─────────────────────────────────────────────
 
-    WHY FACTORY PATTERN?
-    The rest of the code never needs to know WHICH embedder is being used.
-    Change config → different embedder, zero code change elsewhere.
+class OpenAIEmbedder(BaseEmbedder):
+    """
+    Calls OpenAI embeddings API — no large model download, works on Vercel.
+    Model: text-embedding-3-small — 1536-dim, ~$0.02/1M tokens.
+    Use for cloud/Vercel deployment.
+    """
+
+    _DIMENSIONS = {
+        "text-embedding-3-small": 1536,
+        "text-embedding-3-large": 3072,
+        "text-embedding-ada-002": 1536,
+    }
+
+    def __init__(self, api_key: str, model: str = "text-embedding-3-small"):
+        from openai import OpenAI
+        self._client = OpenAI(api_key=api_key)
+        self._model = model
+        self._model_name = model
+        self._dim = self._DIMENSIONS.get(model, 1536)
+        logger.info(f"OpenAI embedder ready: model={model} dim={self._dim}")
+
+    def embed_text(self, text: str) -> List[float]:
+        resp = self._client.embeddings.create(input=[text], model=self._model)
+        return resp.data[0].embedding
+
+    def embed_batch(self, texts: List[str]) -> List[List[float]]:
+        # OpenAI supports up to 2048 inputs per request
+        resp = self._client.embeddings.create(input=texts, model=self._model)
+        # Response items are ordered to match input order
+        return [item.embedding for item in sorted(resp.data, key=lambda x: x.index)]
+
+    @property
+    def dimension(self) -> int:
+        return self._dim
+
+
+# ── Factory ───────────────────────────────────────────────────────────────────
+
+def get_embedder(
+    provider: str = "huggingface",
+    model_name: str = None,
+    api_key: str = None,
+) -> BaseEmbedder:
+    """
+    Factory: returns the right embedder from config.
+    EMBEDDING_PROVIDER=huggingface → local (dev)
+    EMBEDDING_PROVIDER=openai      → cloud API (Vercel)
     """
     if provider == "huggingface":
-        model = model_name or "all-MiniLM-L6-v2"
-        return HuggingFaceEmbedder(model_name=model)
+        return HuggingFaceEmbedder(model_name=model_name or "all-MiniLM-L6-v2")
+    elif provider == "openai":
+        if not api_key:
+            raise ValueError("OPENAI_API_KEY required when EMBEDDING_PROVIDER=openai")
+        return OpenAIEmbedder(api_key=api_key, model=model_name or "text-embedding-3-small")
     else:
-        raise ValueError(f"Unknown embedding provider: {provider}. Supported: huggingface")
+        raise ValueError(f"Unknown embedding provider: {provider}. Supported: huggingface, openai")

@@ -27,20 +27,29 @@ from app.schemas.chat import QueryResponse, SourceReference
 
 
 def _build_pipeline() -> RAGPipeline:
-    """Create the pipeline once. Called by get_rag_service()."""
-    api_key = os.getenv("GROQ_API_KEY", "")
-    if not api_key:
-        logger.warning("GROQ_API_KEY not set — generation will fail on query")
+    """Create the pipeline once. Reads provider config from environment."""
+    embedding_provider = os.getenv("EMBEDDING_PROVIDER", "huggingface")
+    vector_store_provider = os.getenv("VECTOR_STORE_PROVIDER", "chroma")
+
+    # For cloud/Vercel: set EMBEDDING_PROVIDER=openai and VECTOR_STORE_PROVIDER=pinecone
+    embedding_dimension = 1536 if embedding_provider == "openai" else 384
 
     return RAGPipeline(
-        groq_api_key=api_key,
+        groq_api_key=os.getenv("GROQ_API_KEY", ""),
+        embedding_provider=embedding_provider,
+        embedding_model=os.getenv("EMBEDDING_MODEL", "all-MiniLM-L6-v2" if embedding_provider == "huggingface" else "text-embedding-3-small"),
+        openai_api_key=os.getenv("OPENAI_API_KEY", ""),
+        vector_store_provider=vector_store_provider,
         collection_name="nexus_documents",
+        pinecone_api_key=os.getenv("PINECONE_API_KEY", ""),
+        pinecone_index_name=os.getenv("PINECONE_INDEX_NAME", "nexus-ai"),
+        embedding_dimension=embedding_dimension,
         chunk_strategy="recursive",
         chunk_size=800,
         chunk_overlap=150,
         retrieval_top_k=10,
         rerank_top_k=5,
-        use_reranker=True,
+        use_reranker=(embedding_provider == "huggingface"),  # reranker needs sentence-transformers
         use_hybrid_search=True,
     )
 

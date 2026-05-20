@@ -4,6 +4,10 @@ RAG pipeline orchestrator.
 Single entry point that coordinates:
   indexing  → load → chunk → embed → store
   retrieval → embed query → search → rerank → generate
+
+Provider selection via environment variables:
+  EMBEDDING_PROVIDER=huggingface (local dev) | openai (cloud/Vercel)
+  VECTOR_STORE_PROVIDER=chroma (local dev)   | pinecone (cloud/Vercel)
 """
 
 import uuid
@@ -13,31 +17,30 @@ from loguru import logger
 from app.rag.ingestion.loader import RawDocument, load_file, load_url
 from app.rag.ingestion.chunker import chunk_documents, ChunkStrategy
 from app.rag.embeddings.embedder import BaseEmbedder, get_embedder
-from app.rag.retrieval.vector_store import VectorStore
+from app.rag.retrieval.vector_store import BaseVectorStore, get_vector_store
 from app.rag.retrieval.hybrid_search import BM25Index, reciprocal_rank_fusion
-from app.rag.retrieval.reranker import CrossEncoderReranker
 from app.rag.generation.generator import GroqGenerator, GenerationResult
 
 
 class RAGPipeline:
-    """
-    Full RAG pipeline: ingest documents, answer questions.
-
-    Usage:
-        pipeline = RAGPipeline(groq_api_key="gsk_...")
-        pipeline.index_file("company_policy.pdf")
-        result = pipeline.query("What is the vacation policy?")
-        print(result.answer)
-    """
 
     def __init__(
         self,
         groq_api_key: str,
-        collection_name: str = "nexus_documents",
-        chroma_host: str = "localhost",
-        chroma_port: int = 8001,
+        # Embedding config
+        embedding_provider: str = "huggingface",
         embedding_model: str = "all-MiniLM-L6-v2",
+        openai_api_key: str = "",
+        # Vector store config
+        vector_store_provider: str = "chroma",
+        collection_name: str = "nexus_documents",
+        chroma_persist_path: str = "./chroma_data",
+        pinecone_api_key: str = "",
+        pinecone_index_name: str = "nexus-ai",
+        embedding_dimension: int = 384,
+        # LLM config
         llm_model: str = "llama-3.3-70b-versatile",
+        # RAG config
         chunk_strategy: ChunkStrategy = "recursive",
         chunk_size: int = 1000,
         chunk_overlap: int = 200,
@@ -51,58 +54,53 @@ class RAGPipeline:
         self.chunk_overlap = chunk_overlap
         self.retrieval_top_k = retrieval_top_k
         self.rerank_top_k = rerank_top_k
-        self.use_reranker = use_reranker
         self.use_hybrid_search = use_hybrid_search
 
-        logger.info("Initializing RAG pipeline components...")
+        logger.info(f"Initializing RAG pipeline: embed={embedding_provider} store={vector_store_provider}")
 
         self.embedder: BaseEmbedder = get_embedder(
-            provider="huggingface",
+            provider=embedding_provider,
             model_name=embedding_model,
+            api_key=openai_api_key or None,
         )
-        self.vector_store = VectorStore(
+
+        self.vector_store: BaseVectorStore = get_vector_store(
+            provider=vector_store_provider,
             collection_name=collection_name,
-            host=chroma_host,
-            port=chroma_port,
-            persist_path="./chroma_data",
-            use_embedded=True,
+            persist_path=chroma_persist_path,
+            pinecone_api_key=pinecone_api_key or None,
+            pinecone_index_name=pinecone_index_name,
+            embedding_dimension=embedding_dimension,
         )
+
         self.bm25_index = BM25Index()
-        self.generator = GroqGenerator(
-            api_key=groq_api_key,
-            model=llm_model,
-        )
-        self.reranker: Optional[CrossEncoderReranker] = (
-            CrossEncoderReranker() if use_reranker else None
-        )
+
+        self.generator = GroqGenerator(api_key=groq_api_key, model=llm_model)
+
+        # Reranker uses sentence-transformers — skip on cloud where it's not installed
+        self.reranker = None
+        if use_reranker:
+            try:
+                from app.rag.retrieval.reranker import CrossEncoderReranker
+                self.reranker = CrossEncoderReranker()
+            except Exception as e:
+                logger.warning(f"Reranker unavailable (cloud mode): {e}")
 
         logger.info("RAG pipeline ready")
 
-    # ── Indexing ──────────────────────────────────────────────────────────
+    # ── Indexing ──────────────────────────────────────────────────────────────
 
-    def index_file(
-        self,
-        file_path: str,
-        document_id: Optional[str] = None,
-        display_name: Optional[str] = None,   # original filename for citations
-    ) -> dict:
+    def index_file(self, file_path: str, document_id: Optional[str] = None, display_name: Optional[str] = None) -> dict:
         document_id = document_id or str(uuid.uuid4())
         logger.info(f"Indexing file: {file_path} [doc_id={document_id}]")
-
         raw_docs = load_file(file_path)
-
-        # Override the source metadata with the original filename so citations
-        # show "company_policy.pdf" not the temp UUID path
         if display_name:
             for doc in raw_docs:
                 doc.metadata["source"] = display_name
-
         return self._index_raw_docs(raw_docs, document_id)
 
     def index_url(self, url: str, document_id: Optional[str] = None) -> dict:
         document_id = document_id or str(uuid.uuid4())
-        logger.info(f"Indexing URL: {url} [doc_id={document_id}]")
-
         raw_docs = load_url(url)
         return self._index_raw_docs(raw_docs, document_id)
 
@@ -124,38 +122,23 @@ class RAGPipeline:
             logger.warning("No chunks produced — document may be empty")
             return {"document_id": document_id, "chunks_indexed": 0}
 
-        texts = [c.text for c in chunks]
-        embeddings = self.embedder.embed_batch(texts)
-
+        embeddings = self.embedder.embed_batch([c.text for c in chunks])
         self.vector_store.upsert_chunks(chunks, embeddings, document_id)
         self._rebuild_bm25()
 
-        return {
-            "document_id": document_id,
-            "chunks_indexed": len(chunks),
-        }
+        return {"document_id": document_id, "chunks_indexed": len(chunks)}
 
     def _rebuild_bm25(self):
-        # Fetch all documents from ChromaDB to rebuild the BM25 index
         try:
-            all_data = self.vector_store._collection.get(include=["documents", "metadatas"])
-            if all_data["ids"]:
-                self.bm25_index.build(
-                    texts=all_data["documents"],
-                    chunk_ids=all_data["ids"],
-                    metadatas=all_data["metadatas"],
-                )
+            ids, texts, metas = self.vector_store.get_all_chunks()
+            if ids:
+                self.bm25_index.build(texts=texts, chunk_ids=ids, metadatas=metas)
         except Exception as e:
-            logger.warning(f"BM25 rebuild failed: {e}")
+            logger.warning(f"BM25 rebuild skipped: {e}")
 
-    # ── Querying ──────────────────────────────────────────────────────────
+    # ── Querying ──────────────────────────────────────────────────────────────
 
     def _retrieve(self, question: str, where: Optional[dict] = None):
-        """
-        Embed → dense search → hybrid merge → rerank.
-        Extracted so both query() and query_stream() share the same logic.
-        Returns the final reranked list of SearchResult objects.
-        """
         query_embedding = self.embedder.embed_text(question)
 
         dense_results = self.vector_store.search(
@@ -164,7 +147,7 @@ class RAGPipeline:
             where=where,
         )
 
-        if self.use_hybrid_search:
+        if self.use_hybrid_search and self.bm25_index.is_built:
             sparse_results = self.bm25_index.search(question, top_k=self.retrieval_top_k)
             results = reciprocal_rank_fusion(dense_results, sparse_results)
         else:
@@ -177,34 +160,18 @@ class RAGPipeline:
             return self.reranker.rerank(question, results, top_k=self.rerank_top_k)
         return results[:self.rerank_top_k]
 
-    def query(
-        self,
-        question: str,
-        where: Optional[dict] = None,
-        history: Optional[list] = None,
-    ) -> GenerationResult:
-        logger.info(f"Query: '{question[:80]}'" if len(question) <= 80 else f"Query: '{question[:80]}...'")
-
+    def query(self, question: str, where: Optional[dict] = None, history: Optional[list] = None) -> GenerationResult:
+        logger.info(f"Query: '{question[:80]}'")
         results = self._retrieve(question, where=where)
 
         if not results:
-            logger.warning("No results retrieved — knowledge base may be empty")
             return GenerationResult(
                 answer="I don't have any documents to search. Please upload documents first.",
                 sources=[],
                 model="none",
             )
 
-        result = self.generator.generate(
-            query=question,
-            context_results=results,
-            history=history,
-        )
-
-        logger.info(f"Answer: {result.prompt_tokens} prompt + {result.completion_tokens} completion tokens")
-        return result
-
-    # ── Info ──────────────────────────────────────────────────────────────
+        return self.generator.generate(query=question, context_results=results, history=history)
 
     def stats(self) -> dict:
         return {
@@ -212,5 +179,5 @@ class RAGPipeline:
             "embedding_model": self.embedder._model_name,
             "llm_model": self.generator._model,
             "hybrid_search": self.use_hybrid_search,
-            "reranking": self.use_reranker,
+            "reranking": self.reranker is not None,
         }

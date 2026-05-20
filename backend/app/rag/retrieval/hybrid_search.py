@@ -72,6 +72,10 @@ class BM25Index:
         self._bm25 = BM25Okapi(tokenized)
         logger.info(f"BM25 index built with {len(texts)} documents")
 
+    @property
+    def is_built(self) -> bool:
+        return self._bm25 is not None
+
     def search(self, query: str, top_k: int = 10) -> List[SearchResult]:
         if self._bm25 is None:
             return []

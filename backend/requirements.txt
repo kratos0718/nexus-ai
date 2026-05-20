@@ -7,6 +7,7 @@
 fastapi==0.115.5
 uvicorn[standard]==0.32.1      # ASGI server (runs FastAPI)
 python-multipart==0.0.12       # File uploads
+mangum==0.17.0                 # ASGI adapter for Vercel/Lambda
 
 # --- DATA VALIDATION ---
 pydantic==2.10.3               # Request/response validation
