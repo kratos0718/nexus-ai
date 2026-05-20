@@ -6,7 +6,7 @@ FRONTEND_DIR = frontend
 setup:
 	@echo "Setting up backend..."
 	cp -n $(BACKEND_DIR)/.env.example $(BACKEND_DIR)/.env 2>/dev/null || true
-	conda run -n $(CONDA_ENV) pip install -r $(BACKEND_DIR)/requirements.txt
+	conda run -n $(CONDA_ENV) pip install -r $(BACKEND_DIR)/requirements-dev.txt
 	@echo "Setting up frontend..."
 	cd $(FRONTEND_DIR) && npm install
 	@echo ""
