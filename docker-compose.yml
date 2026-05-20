@@ -1,40 +1,40 @@
 # ============================================================
-# NEXUS AI — Docker Compose (Local Development)
+# NEXUS AI — Docker Compose
 # ============================================================
-# What this does: Starts ALL services you need locally
-# with a SINGLE command: docker-compose up -d
 #
-# Services started:
-#   - PostgreSQL (your relational database)
-#   - Redis (cache + Celery broker)
-#   - ChromaDB (vector database)
+# DEV mode (infrastructure only — FastAPI + Next.js run locally):
+#   docker compose up postgres redis -d
 #
-# Your FastAPI + Next.js run OUTSIDE Docker in dev
-# (faster hot-reload, easier debugging)
+# FULL PRODUCTION stack:
+#   docker compose --profile prod up -d
+#
+# Services:
+#   postgres  — relational DB (always)
+#   redis     — cache + Celery broker (always)
+#   backend   — FastAPI (prod profile only)
+#   frontend  — Next.js (prod profile only)
 # ============================================================
-
-version: "3.9"
 
 services:
-  # ── PostgreSQL ─────────────────────────────────────────────
+  # ── PostgreSQL ──────────────────────────────────────────────────────────────
   postgres:
     image: postgres:16-alpine
     container_name: nexus_postgres
     environment:
-      POSTGRES_USER: nexus_user
-      POSTGRES_PASSWORD: nexus_pass
-      POSTGRES_DB: nexus_db
+      POSTGRES_USER: ${POSTGRES_USER:-nexus_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-nexus_pass}
+      POSTGRES_DB: ${POSTGRES_DB:-nexus_db}
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U nexus_user -d nexus_db"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-nexus_user} -d ${POSTGRES_DB:-nexus_db}"]
       interval: 10s
       timeout: 5s
       retries: 5
 
-  # ── Redis ──────────────────────────────────────────────────
+  # ── Redis ───────────────────────────────────────────────────────────────────
   redis:
     image: redis:7-alpine
     container_name: nexus_redis
@@ -49,29 +49,62 @@ services:
       timeout: 5s
       retries: 5
 
-  # ── ChromaDB (Vector Database) ─────────────────────────────
-  chromadb:
-    image: chromadb/chroma:latest
-    container_name: nexus_chromadb
-    ports:
-      - "8001:8000"
-    volumes:
-      - chroma_data:/chroma/chroma
+  # ── FastAPI Backend (production profile) ────────────────────────────────────
+  backend:
+    profiles: ["prod"]
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: nexus_backend
     environment:
-      - IS_PERSISTENT=TRUE
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-nexus_user}:${POSTGRES_PASSWORD:-nexus_pass}@postgres:5432/${POSTGRES_DB:-nexus_db}
+      GROQ_API_KEY: ${GROQ_API_KEY}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY}
+      REDIS_URL: redis://redis:6379/0
+    ports:
+      - "8000:8000"
+    volumes:
+      - uploads_data:/app/uploads
+      - chroma_data:/app/chroma_data
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/heartbeat"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      start_period: 40s
+      retries: 3
+    restart: unless-stopped
 
-# ── Named Volumes (data persists between restarts) ─────────
+  # ── Next.js Frontend (production profile) ───────────────────────────────────
+  frontend:
+    profiles: ["prod"]
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000/api/v1}
+    container_name: nexus_frontend
+    environment:
+      NODE_ENV: production
+    ports:
+      - "3000:3000"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+# ── Named Volumes ────────────────────────────────────────────────────────────
 volumes:
   postgres_data:
   redis_data:
+  uploads_data:
   chroma_data:
 
-# ── Network ────────────────────────────────────────────────
+# ── Network ──────────────────────────────────────────────────────────────────
 networks:
   default:
     name: nexus_network

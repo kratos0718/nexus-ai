@@ -146,6 +146,38 @@ HuggingFace · sentence-transformers · SQLAlchemy · JWT · WebSockets · RAGAS
   for query, 10 req/min for streaming) returning RFC-compliant 429 responses
 ```
 
+### Day 5–6 additions
+```
+• Built multi-tenant data layer with user_id FK on all owned resources — all
+  queries scoped by authenticated user, returning 404 (not 403) on cross-user
+  access to prevent resource enumeration
+
+• Designed Next.js 14 App Router frontend with JWT token management via Axios
+  interceptors — automatic access-token refresh on 401, real-time document upload
+  dashboard with 3-second polling, and streaming chat with citation rendering
+
+• Implemented LangGraph multi-agent orchestration: router node classifies queries
+  as simple or complex, planner node decomposes into sub-questions, parallel
+  research nodes retrieve with deduplication, synthesizer combines results —
+  streamed node-by-node progress to browser via SSE
+```
+
+### Day 7 additions
+```
+• Implemented Alembic database migration system with batch mode for SQLite
+  compatibility — version-controlled schema history, reversible upgrade/downgrade,
+  auto-applied at container startup via CMD
+
+• Built 26-test pytest suite for async FastAPI endpoints using in-memory SQLite
+  per test, dependency overrides for test isolation, and AsyncMock for ML service
+  mocking — covers auth, document CRUD, conversation CRUD, and cross-user
+  isolation
+
+• Containerized full stack with Docker multi-stage builds: backend image ~400MB
+  (from ~2GB naive), Next.js image ~80MB via standalone output — Docker Compose
+  with health-checked service startup ordering and dev/prod profile separation
+```
+
 ### For "AI/ML Engineer" roles
 Lead with: RAG pipeline, RAGAS evaluation, embedding models, hybrid search, reranking
 

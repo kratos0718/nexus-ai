@@ -21,6 +21,7 @@ psycopg2-binary==2.9.10        # Sync PostgreSQL driver
 # --- AUTHENTICATION ---
 python-jose[cryptography]==3.3.0   # JWT tokens
 passlib[bcrypt]==1.7.4             # Password hashing
+bcrypt==4.0.1                      # Pinned: passlib incompatible with bcrypt>=4.1
 python-dotenv==1.0.1               # Load .env files
 
 # --- RATE LIMITING ---

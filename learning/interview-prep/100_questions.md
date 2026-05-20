@@ -327,6 +327,57 @@ A: Hydration = React attaches event listeners and state to server-rendered HTML,
 **Q100. How does `fetch` streaming work in the browser compared to Axios?**
 A: Axios buffers the full response body before resolving the promise — useless for streaming. `fetch` returns a `ReadableStream` via `res.body.getReader()`. You call `reader.read()` in a loop — each call resolves with `{ done, value }` where `value` is a `Uint8Array` chunk. Decode with `TextDecoder({ stream: true })` (the `stream: true` flag handles multi-byte UTF-8 chars split across chunks). Parse SSE format from the decoded string. This gives true token-by-token streaming with ~50ms latency from the LLM to the browser.
 
+---
+
+## SECTION 8: DATABASE MIGRATIONS, TESTING & DOCKER (Q101–Q115)
+
+**Q101. What is a database migration and why do you need one?**
+A: A migration is a versioned, reversible script that applies a schema change to a database. Without migrations, schema changes are manual (direct SQL), unversioned, and inconsistent across environments — a developer's DB and production DB drift apart. Migrations version-control the schema just like code: every developer runs the same sequence of scripts in order and ends up with an identical DB state. Alembic is the standard migration tool for SQLAlchemy projects.
+
+**Q102. How does Alembic know what migrations to generate?**
+A: Alembic imports all SQLAlchemy models (via `target_metadata = Base.metadata` in `env.py`), then connects to the live database and reads its current schema. It diffs the two: what's in the models but not in the DB becomes `op.create_table()` / `op.add_column()` calls in `upgrade()`. The reverse operations go in `downgrade()`. You must import all model files before calling `autogenerate` — missing imports = missing tables in the diff.
+
+**Q103. Why does Alembic need a synchronous database driver?**
+A: Alembic's internal connection protocol is synchronous — it opens a connection, runs SQL, commits. Async drivers (aiosqlite, asyncpg) are built for async/await and cannot be used with synchronous code. Solution: strip the async driver prefix from the DATABASE_URL: `sqlite+aiosqlite://` → `sqlite://`, `postgresql+asyncpg://` → `postgresql://`. The app still uses async drivers at runtime; only Alembic uses sync drivers, only during migration.
+
+**Q104. What is `render_as_batch=True` in Alembic?**
+A: SQLite has a fundamental limitation: it doesn't support `ALTER TABLE ... ADD CONSTRAINT`, `ALTER TABLE ... DROP COLUMN`, or most other schema-altering statements. Batch mode works around this by: (1) creating a new temp table with the desired schema, (2) copying all data from the original table, (3) dropping the original, (4) renaming the temp table. This is called the "copy-and-move" strategy. Setting `render_as_batch=True` in `env.py` makes Alembic always use batch operations, which is safe on both SQLite and PostgreSQL.
+
+**Q105. What is `alembic stamp head` and when do you use it?**
+A: `alembic stamp head` inserts the current revision ID into the `alembic_version` table without running any migration SQL. You use it when the DB schema already matches the migration (e.g., tables were created by `Base.metadata.create_all()` at app startup) but Alembic doesn't know this yet. Without stamping, running `alembic upgrade head` would fail with "table already exists." Stamping says: "trust me, the DB is already at this point in history — start tracking from here."
+
+**Q106. How do you design a zero-downtime migration strategy?**
+A: Use backward-compatible (additive) migrations in two phases. Phase 1: add a nullable new column and deploy new code that reads both old and new columns. Phase 2 (next deploy): backfill data, make column non-null, remove old column reads. This way the old code and new code can run simultaneously during the rolling deploy window. Avoid destructive changes (DROP COLUMN, RENAME COLUMN) in a single deployment — old code will break if the column it expects disappears mid-deploy.
+
+**Q107. What is `scope="function"` in pytest fixtures and why does it matter for DB tests?**
+A: Fixture scope controls how often the fixture is created and destroyed. `scope="function"` (default) creates a fresh fixture for each test function. `scope="module"` creates once per file. `scope="session"` creates once for the entire test run. For database fixtures, always use `scope="function"` — each test gets a clean in-memory DB with no leftover data from previous tests. Using broader scopes causes test pollution: a record created in test A is visible in test B, making tests order-dependent and flaky.
+
+**Q108. What is `ASGITransport` and why use it over `TestClient`?**
+A: `ASGITransport` is an HTTPX transport adapter that sends requests directly to a FastAPI ASGI app in-process — no TCP sockets, no port binding, no real HTTP server. It's faster (no network round-trip) and more reliable (no port conflicts). `httpx.AsyncClient(transport=ASGITransport(app=app))` is the recommended way to test async FastAPI apps because FastAPI is async — `TestClient` uses Starlette's synchronous wrapper which can cause issues with async test fixtures and event loops.
+
+**Q109. Why must you use `AsyncMock` instead of `MagicMock` for async functions?**
+A: `MagicMock` returns a regular Python value when called. If you mock an `async def` function with `MagicMock`, calling it returns a plain object, not a coroutine. When the code does `await mock()`, Python raises `TypeError: object MagicMock is not awaitable`. `AsyncMock` returns a coroutine object when called, so `await async_mock()` works correctly. Always use `new_callable=AsyncMock` in `patch()` when the target function is `async def`.
+
+**Q110. Why should unauthorized access return 404 instead of 403?**
+A: 403 Forbidden tells the attacker that the resource exists — they just don't have permission. This leaks information: an attacker probing document IDs learns which IDs are valid for other users. 404 Not Found reveals nothing — the resource doesn't exist as far as this user is concerned. This is called "security through obscurity at the resource-existence level." Major cloud providers (AWS S3, GitHub) use this pattern: trying to access another user's private resource returns 404, not 403.
+
+**Q111. What does `app.dependency_overrides.clear()` do and what happens if you forget it?**
+A: `app.dependency_overrides` is a dict on the FastAPI app object (not on the test instance). It persists across tests unless explicitly cleared. If you forget to call `.clear()` after a test, the override leaks into subsequent tests — those tests also get the mocked dependency even though they didn't request it. This causes false positives (tests pass when they shouldn't) and false negatives (tests fail due to unexpected mock state). Always clear in the fixture's teardown (after `yield`), not in the test itself, so cleanup happens even if the test raises an exception.
+
+**Q112. What is the difference between a named volume and a bind mount in Docker?**
+A: A named volume (`postgres_data:/var/lib/postgresql/data`) is managed by Docker — stored in `/var/lib/docker/volumes/`, persists across `docker compose down`, not directly accessible from the host filesystem. Use for databases and persistent state. A bind mount (`./backend:/app`) links a host directory directly into the container — changes on the host are immediately visible inside the container and vice versa. Use for development hot-reload. Named volumes are more portable (no host path assumptions) and have better I/O performance on macOS/Windows.
+
+**Q113. Why do you run `alembic upgrade head` in the Docker CMD instead of as a separate CI step?**
+A: Running migrations at container startup ensures the schema is always current before the server handles any traffic. It's idempotent (safe to run repeatedly — exits immediately if no pending migrations). It handles the case where multiple replicas start simultaneously by relying on database-level locking in Alembic. A separate CI step is harder to coordinate with rolling deployments — some replicas might start before the migration CI step completes. The CMD approach is self-contained: deploy the image, migrations run, server starts.
+
+**Q114. What does `output: "standalone"` do in Next.js?**
+A: It tells Next.js's build system to trace all runtime dependencies and bundle only those into `.next/standalone/`. This folder contains a complete, self-contained Node.js server (no `node_modules` directory needed). In Docker, this means copying ~50MB of standalone output instead of 500MB+ of `node_modules`. The resulting `server.js` is the standalone server — run with `node server.js`, no `next start` CLI needed. Without standalone mode, you'd need to copy the full `node_modules` into the production image.
+
+**Q115. What is the difference between `ENTRYPOINT` and `CMD` in a Dockerfile?**
+A: `ENTRYPOINT` defines the fixed executable that always runs when the container starts — it cannot be overridden by `docker run` arguments (only by `--entrypoint`). `CMD` provides default arguments to `ENTRYPOINT`, or if no `ENTRYPOINT` is set, it's the command that runs. `CMD` IS overridden by arguments passed to `docker run`. Example: `ENTRYPOINT ["python"]` + `CMD ["app.py"]` → running `docker run image script.py` substitutes CMD, runs `python script.py`. When using `CMD ["sh", "-c", "..."]` as a single command (our pattern), the entire thing is overridable but `sh -c` is implied.
+
+---
+
 ## "TELL ME ABOUT YOUR PROJECT" — 3 VERSIONS
 
 ### 30 seconds (elevator pitch)
