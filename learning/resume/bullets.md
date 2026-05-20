@@ -79,6 +79,21 @@ HuggingFace · sentence-transformers · SQLAlchemy · JWT · WebSockets · RAGAS
 
 ## JOB-SPECIFIC VARIATIONS
 
+### Day 3 additions
+```
+• Built async FastAPI REST API (10 endpoints) with dependency-injected SQLAlchemy
+  async sessions, Pydantic validation, and global exception handling
+
+• Implemented 202 Accepted async upload pattern — document indexing runs in
+  background, clients poll /status endpoint; eliminates 40-second HTTP wait
+
+• Applied run_in_executor for CPU-bound embedding/inference operations, keeping
+  FastAPI event loop non-blocking under concurrent user load
+
+• Architected service layer separating HTTP (endpoints) from business logic
+  (RAGService) enabling independent testing and multi-channel invocation
+```
+
 ### For "AI/ML Engineer" roles
 Lead with: RAG pipeline, RAGAS evaluation, embedding models, hybrid search, reranking
 

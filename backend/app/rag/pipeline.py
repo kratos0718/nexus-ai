@@ -80,11 +80,23 @@ class RAGPipeline:
 
     # ── Indexing ──────────────────────────────────────────────────────────
 
-    def index_file(self, file_path: str, document_id: Optional[str] = None) -> dict:
+    def index_file(
+        self,
+        file_path: str,
+        document_id: Optional[str] = None,
+        display_name: Optional[str] = None,   # original filename for citations
+    ) -> dict:
         document_id = document_id or str(uuid.uuid4())
         logger.info(f"Indexing file: {file_path} [doc_id={document_id}]")
 
         raw_docs = load_file(file_path)
+
+        # Override the source metadata with the original filename so citations
+        # show "company_policy.pdf" not the temp UUID path
+        if display_name:
+            for doc in raw_docs:
+                doc.metadata["source"] = display_name
+
         return self._index_raw_docs(raw_docs, document_id)
 
     def index_url(self, url: str, document_id: Optional[str] = None) -> dict:

@@ -3,83 +3,73 @@ FastAPI application entry point.
 Creates app, registers routers, configures middleware and lifespan events.
 """
 
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
+import os
 from contextlib import asynccontextmanager
+
+from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from loguru import logger
 
-from app.core.config import settings
+from app.core.database import create_tables
+from app.api.v1.router import api_router
 
 
-# ── Lifespan: runs on startup and shutdown ─────────────────────────────
-# Modern FastAPI pattern (replaces @app.on_event decorators)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # STARTUP: runs before first request
-    logger.info(f"Starting {settings.app_name} v{settings.app_version}")
-    logger.info(f"Environment: {settings.app_env}")
-    logger.info(f"LLM Model: {settings.llm_model}")
+    # ── Startup ──────────────────────────────────────────────────────────
+    logger.info("Starting Nexus AI...")
 
-    # TODO Week 1: Initialize database connection pool
-    # TODO Week 1: Initialize vector database client
-    # TODO Week 1: Warm up embedding model
+    # Create SQLite tables (idempotent — safe to run every time)
+    await create_tables()
+    logger.info("Database tables ready")
 
-    yield  # Application runs here
+    # Create uploads directory
+    os.makedirs("./uploads", exist_ok=True)
 
-    # SHUTDOWN: runs after last request
-    logger.info("Shutting down Nexus AI...")
-    # TODO: Close database connections, cleanup resources
+    logger.info("Nexus AI ready. Visit http://localhost:8000/docs")
+    yield
+
+    # ── Shutdown ─────────────────────────────────────────────────────────
+    logger.info("Shutting down Nexus AI")
 
 
-# ── Application Instance ───────────────────────────────────────────────
 app = FastAPI(
-    title=settings.app_name,
+    title="Nexus AI",
     description="Enterprise Multi-Agent RAG Intelligence Platform",
-    version=settings.app_version,
-    docs_url="/docs" if settings.debug else None,      # Hide docs in prod
-    redoc_url="/redoc" if settings.debug else None,
+    version="1.0.0",
     lifespan=lifespan,
 )
 
-
-# ── Middleware ─────────────────────────────────────────────────────────
-# CORS: allows frontend (localhost:3000) to call our backend (localhost:8000)
+# ── Middleware ────────────────────────────────────────────────────────────
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.allowed_origins,
+    allow_origins=["http://localhost:3000", "http://localhost:3001"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 
-# ── Routes ─────────────────────────────────────────────────────────────
-# We'll add these routers as we build each feature:
-# from app.api.v1.endpoints import auth, documents, chat, agents
-# app.include_router(auth.router, prefix="/api/v1/auth", tags=["auth"])
-# app.include_router(documents.router, prefix="/api/v1/documents", tags=["documents"])
-# app.include_router(chat.router, prefix="/api/v1/chat", tags=["chat"])
+# ── Global exception handler ──────────────────────────────────────────────
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    logger.error(f"Unhandled exception on {request.url}: {exc}")
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Internal server error", "type": type(exc).__name__},
+    )
 
 
-# ── Health Check ───────────────────────────────────────────────────────
+# ── Routes ────────────────────────────────────────────────────────────────
+app.include_router(api_router, prefix="/api/v1")
+
+
 @app.get("/health", tags=["system"])
-async def health_check():
-    """
-    Health check endpoint.
-    Used by: load balancers, Docker, Kubernetes, monitoring systems.
-    Should return 200 when the app is ready to serve requests.
-    """
-    return {
-        "status": "healthy",
-        "version": settings.app_version,
-        "environment": settings.app_env,
-    }
+async def health():
+    return {"status": "healthy", "version": "1.0.0"}
 
 
 @app.get("/", tags=["system"])
 async def root():
-    return {
-        "message": f"Welcome to {settings.app_name}",
-        "docs": "/docs",
-        "health": "/health",
-    }
+    return {"message": "Nexus AI", "docs": "/docs", "health": "/health"}

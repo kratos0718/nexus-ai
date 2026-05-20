@@ -25,10 +25,13 @@ dist/
 build/
 *.egg
 
-# Vector DB data (large, regeneratable)
+# Runtime data — regeneratable, never commit
 chroma_data/
-uploads/
 backend/chroma_data/
+uploads/
+backend/uploads/
+*.db
+backend/*.db
 
 # Node.js / Frontend
 node_modules/

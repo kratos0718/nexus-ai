@@ -214,7 +214,54 @@ A: Delete old chunks by document_id (vector_store.delete_document(doc_id)), then
 **Q65. How would you handle a 500-page PDF?**  
 A: Load page by page (PyPDF), chunk each page independently (avoids one massive chunk list), embed in batches of 32-64 (GPU memory efficient), upsert to vector DB in batches of 100. Use Celery to run this as a background task — don't block the HTTP response. Show a progress indicator to the user. Expected time: ~2-5 minutes for 500 pages on CPU, ~30 seconds on GPU.
 
-## SECTION 5: AGENTS & LANGCHAIN (Q66–Q80)
+## SECTION 5: FASTAPI, ASYNC, API DESIGN (Q66–Q80)
+
+**Q66. Why FastAPI over Flask or Django for an AI backend?**  
+A: Three reasons specific to AI: (1) Async-native — LLM API calls, DB queries, and file I/O are all I/O-bound. Async allows one server process to handle hundreds of concurrent requests waiting on Groq/OpenAI responses, vs Flask's thread-per-request model. (2) Pydantic integration — same library used for LLM output parsing (structured outputs) is used for API validation, reducing cognitive overhead. (3) Auto-generated OpenAPI docs at /docs — critical for team collaboration and frontend integration. Flask needs flask-restx or similar plugins for all of this.
+
+**Q67. What is async/await in Python?**  
+A: A cooperative multitasking model. `async def` defines a coroutine — a function that can be paused and resumed. `await` pauses execution of the current coroutine and hands control back to the event loop, which runs other coroutines while waiting. Unlike threads (preemptive switching), coroutines switch only at `await` points — no race conditions on shared data. Best for I/O-bound work (network, DB). For CPU-bound work (embedding, inference), use `run_in_executor` to offload to a thread pool.
+
+**Q68. What is run_in_executor and when do you use it?**  
+A: `asyncio.get_event_loop().run_in_executor(None, blocking_function)` runs a synchronous blocking function in a thread pool without blocking the event loop. Use it when: you have synchronous library code (sentence-transformers, ChromaDB) that can't be easily made async, and you need to call it from an async context. The `None` argument uses Python's default ThreadPoolExecutor. For CPU-heavy work, consider ProcessPoolExecutor to bypass the GIL.
+
+**Q69. What is FastAPI's dependency injection and why use it?**  
+A: `Depends(get_db)` tells FastAPI to call `get_db()` before the endpoint and inject the result. Benefits: (1) Lifecycle management — the dependency handles DB session open/close, the endpoint just uses it. (2) Testability — swap real DB with mock by overriding the dependency in tests. (3) Reusability — one `get_db` function used by all endpoints. (4) Chaining — a dependency can depend on another (e.g., `require_admin` depends on `get_current_user`).
+
+**Q70. Explain the 202 Accepted pattern. When do you use it?**  
+A: 202 means "request received and accepted for processing — result not yet available." Use for operations taking more than a second: document indexing, video processing, ML inference jobs, email sending. Pattern: POST request → 202 + job_id → client polls GET /jobs/{id}/status until status = "completed". Alternative to long-polling: use WebSockets for server-push status updates. Used by: GitHub Actions API, Stripe API, AWS async endpoints.
+
+**Q71. What is Pydantic and how does it work?**  
+A: Pydantic is a data validation library using Python type hints. When you define a `BaseModel` subclass, Pydantic generates validation logic from the type annotations. When data is passed to the model, Pydantic: (1) checks types and coerces where safe (e.g., "5" → 5 for an int field), (2) runs field validators (min_length, ge, le, regex), (3) raises `ValidationError` if anything fails. FastAPI catches ValidationError and returns a 422 response with details of which fields failed and why.
+
+**Q72. What is the difference between a Pydantic schema and a SQLAlchemy model?**  
+A: SQLAlchemy model (e.g., `Document`) maps to a database table — it has columns, relationships, and is used for persistence. Pydantic schema (e.g., `DocumentStatusResponse`) defines the shape of API input/output — it validates data crossing the API boundary and serializes to JSON. A single DB table might have multiple schemas: one for creation (fewer fields), one for response (includes computed fields), one for updates (all optional). `model_config = {"from_attributes": True}` lets you build a Pydantic schema from an ORM object.
+
+**Q73. What HTTP status code do you return when a file is too large?**  
+A: 413 Request Entity Too Large. Common mistake: returning 400 Bad Request. 400 means the request format is wrong (malformed JSON, missing required field). 413 specifically means the payload exceeds the server's allowed size. In our project: `raise HTTPException(status_code=413, detail="File exceeds 50MB limit")`.
+
+**Q74. What is the service layer and why separate it from endpoints?**  
+A: The service layer contains business logic — the rules of the application regardless of how it's called. Endpoints handle HTTP (parse request, return response). Services handle logic (orchestrate pipeline + database). Benefits: (1) Same service can be called by REST endpoint, WebSocket handler, background task, and CLI script. (2) Testable without HTTP — call service.query() directly in a test. (3) Endpoints can be thin (5-10 lines) — easier to read and maintain. (4) Business rules don't scatter across endpoints.
+
+**Q75. What is the lifespan pattern in FastAPI?**  
+A: The `@asynccontextmanager async def lifespan(app)` function runs startup code before the first request (create DB tables, load ML models, connect to Redis) and shutdown code after the last request (close connections, flush logs). Modern replacement for the deprecated `@app.on_event("startup")` pattern. Wrapping startup in lifespan makes it testable and composable. In our project: we create SQLite tables and the uploads directory at startup.
+
+**Q76. How do you handle file uploads in FastAPI?**  
+A: Use `UploadFile = File(...)` as a parameter. FastAPI streams the file — it doesn't load it all into memory. Use `await file.read()` to get bytes, or `file.file` for a file-like object for streaming large files. Validate: extension (whitelist), size (read bytes, check len), MIME type (use `python-magic`). Save to temp path for background processing, clean up after. In production: upload directly to S3/GCS instead of local disk.
+
+**Q77. What is CORS and why configure it?**  
+A: Cross-Origin Resource Sharing — a browser security policy that blocks JavaScript on one origin (http://localhost:3000) from calling an API on another origin (http://localhost:8000). The browser sends a preflight OPTIONS request; if the server's CORS headers allow it, the actual request proceeds. In FastAPI: `CORSMiddleware(allow_origins=["http://localhost:3000"])`. In production: restrict to your actual frontend domain, never use `allow_origins=["*"]` with `allow_credentials=True` (security vulnerability).
+
+**Q78. Explain the global exception handler pattern.**  
+A: `@app.exception_handler(Exception)` catches any unhandled exception from any endpoint and returns a consistent JSON error response instead of an HTML traceback. In production this is critical: (1) Never expose Python tracebacks to clients (information leakage). (2) Always return JSON (not HTML) from an API. (3) Log the error server-side for debugging. We also log the URL and exception type so we can trace errors in Langfuse/logs.
+
+**Q79. How do you structure API versioning?**  
+A: Prefix all routes with `/api/v1/`. When breaking changes are needed, add `/api/v2/` with the new behavior, keep v1 running for backward compatibility. In FastAPI: `app.include_router(v1_router, prefix="/api/v1")`. Why versioning matters: if you change a response field, any client relying on the old field breaks. Versioning gives you time to migrate clients before deprecating v1. Industry standard: maintain N-1 versions (current + previous).
+
+**Q80. What is the difference between 401 Unauthorized and 403 Forbidden?**  
+A: 401 = "Who are you? Prove your identity." — no valid authentication token provided. Client should re-authenticate (login again). 403 = "I know who you are, but you can't do this." — authenticated but not authorized (e.g., regular user trying to delete another user's document). In our project (Day 5): 401 when JWT is missing or expired, 403 when the user tries to access another user's knowledge base.
+
+## SECTION 6: AGENTS & LANGCHAIN (Q81–Q95)
 
 *[To be completed on Day 6-10]*
 
