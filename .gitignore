@@ -1,0 +1,50 @@
+# ============================================================
+# NEXUS AI — Git Ignore
+# CRITICAL: .env MUST be here — never commit API keys!
+# ============================================================
+
+# Environment & Secrets (NEVER COMMIT)
+.env
+.env.local
+.env.*.local
+*.key
+*.pem
+secrets/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+venv/
+.venv/
+env/
+dist/
+build/
+*.egg
+
+# Vector DB data (large, regeneratable)
+chroma_data/
+uploads/
+
+# Node.js / Frontend
+node_modules/
+.next/
+out/
+.turbo/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Logs
+*.log
+logs/
+
+# Docker
+docker/volumes/

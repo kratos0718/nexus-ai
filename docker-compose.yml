@@ -1,0 +1,77 @@
+# ============================================================
+# NEXUS AI — Docker Compose (Local Development)
+# ============================================================
+# What this does: Starts ALL services you need locally
+# with a SINGLE command: docker-compose up -d
+#
+# Services started:
+#   - PostgreSQL (your relational database)
+#   - Redis (cache + Celery broker)
+#   - ChromaDB (vector database)
+#
+# Your FastAPI + Next.js run OUTSIDE Docker in dev
+# (faster hot-reload, easier debugging)
+# ============================================================
+
+version: "3.9"
+
+services:
+  # ── PostgreSQL ─────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: nexus_postgres
+    environment:
+      POSTGRES_USER: nexus_user
+      POSTGRES_PASSWORD: nexus_pass
+      POSTGRES_DB: nexus_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nexus_user -d nexus_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Redis ──────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: nexus_redis
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── ChromaDB (Vector Database) ─────────────────────────────
+  chromadb:
+    image: chromadb/chroma:latest
+    container_name: nexus_chromadb
+    ports:
+      - "8001:8000"
+    volumes:
+      - chroma_data:/chroma/chroma
+    environment:
+      - IS_PERSISTENT=TRUE
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/heartbeat"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+# ── Named Volumes (data persists between restarts) ─────────
+volumes:
+  postgres_data:
+  redis_data:
+  chroma_data:
+
+# ── Network ────────────────────────────────────────────────
+networks:
+  default:
+    name: nexus_network
