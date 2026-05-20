@@ -45,6 +45,9 @@ langgraph==0.2.60
 # --- VECTOR DATABASE (cloud) ---
 pinecone-client==5.0.1    # replaces chromadb for Vercel
 
+# --- EMBEDDINGS (cloud, free) ---
+cohere==5.13.12           # free tier at cohere.com, replaces sentence-transformers
+
 # --- DOCUMENT PROCESSING ---
 pypdf==5.1.0
 python-docx==1.1.2

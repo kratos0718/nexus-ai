@@ -31,6 +31,7 @@ class RAGPipeline:
         embedding_provider: str = "huggingface",
         embedding_model: str = "all-MiniLM-L6-v2",
         openai_api_key: str = "",
+        cohere_api_key: str = "",
         # Vector store config
         vector_store_provider: str = "chroma",
         collection_name: str = "nexus_documents",
@@ -58,10 +59,11 @@ class RAGPipeline:
 
         logger.info(f"Initializing RAG pipeline: embed={embedding_provider} store={vector_store_provider}")
 
+        embedding_api_key = cohere_api_key or openai_api_key or None
         self.embedder: BaseEmbedder = get_embedder(
             provider=embedding_provider,
             model_name=embedding_model,
-            api_key=openai_api_key or None,
+            api_key=embedding_api_key,
         )
 
         self.vector_store: BaseVectorStore = get_vector_store(

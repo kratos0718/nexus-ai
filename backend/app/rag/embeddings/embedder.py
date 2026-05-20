@@ -100,6 +100,40 @@ class OpenAIEmbedder(BaseEmbedder):
         return self._dim
 
 
+# ── Cohere (cloud, free tier) ─────────────────────────────────────────────────
+
+class CohereEmbedder(BaseEmbedder):
+    """
+    Calls Cohere embeddings API — free tier, no credit card.
+    Model: embed-english-v3.0 — 1024-dim, sign up at cohere.com.
+    Use for Vercel/cloud deployment.
+    """
+
+    def __init__(self, api_key: str, model: str = "embed-english-v3.0"):
+        import cohere
+        self._client = cohere.Client(api_key)
+        self._model = model
+        self._model_name = model
+        self._dim = 1024
+        logger.info(f"Cohere embedder ready: model={model} dim={self._dim}")
+
+    def embed_text(self, text: str) -> List[float]:
+        resp = self._client.embed(
+            texts=[text], model=self._model, input_type="search_query"
+        )
+        return list(resp.embeddings[0])
+
+    def embed_batch(self, texts: List[str]) -> List[List[float]]:
+        resp = self._client.embed(
+            texts=texts, model=self._model, input_type="search_document"
+        )
+        return [list(e) for e in resp.embeddings]
+
+    @property
+    def dimension(self) -> int:
+        return self._dim
+
+
 # ── Factory ───────────────────────────────────────────────────────────────────
 
 def get_embedder(
@@ -107,16 +141,15 @@ def get_embedder(
     model_name: str = None,
     api_key: str = None,
 ) -> BaseEmbedder:
-    """
-    Factory: returns the right embedder from config.
-    EMBEDDING_PROVIDER=huggingface → local (dev)
-    EMBEDDING_PROVIDER=openai      → cloud API (Vercel)
-    """
     if provider == "huggingface":
         return HuggingFaceEmbedder(model_name=model_name or "all-MiniLM-L6-v2")
     elif provider == "openai":
         if not api_key:
             raise ValueError("OPENAI_API_KEY required when EMBEDDING_PROVIDER=openai")
         return OpenAIEmbedder(api_key=api_key, model=model_name or "text-embedding-3-small")
+    elif provider == "cohere":
+        if not api_key:
+            raise ValueError("COHERE_API_KEY required when EMBEDDING_PROVIDER=cohere")
+        return CohereEmbedder(api_key=api_key, model=model_name or "embed-english-v3.0")
     else:
-        raise ValueError(f"Unknown embedding provider: {provider}. Supported: huggingface, openai")
+        raise ValueError(f"Unknown embedding provider: {provider}. Supported: huggingface, openai, cohere")

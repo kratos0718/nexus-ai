@@ -32,13 +32,18 @@ def _build_pipeline() -> RAGPipeline:
     vector_store_provider = os.getenv("VECTOR_STORE_PROVIDER", "chroma")
 
     # For cloud/Vercel: set EMBEDDING_PROVIDER=openai and VECTOR_STORE_PROVIDER=pinecone
-    embedding_dimension = 1536 if embedding_provider == "openai" else 384
+    embedding_dimension = {"openai": 1536, "cohere": 1024}.get(embedding_provider, 384)
 
     return RAGPipeline(
         groq_api_key=os.getenv("GROQ_API_KEY", ""),
         embedding_provider=embedding_provider,
-        embedding_model=os.getenv("EMBEDDING_MODEL", "all-MiniLM-L6-v2" if embedding_provider == "huggingface" else "text-embedding-3-small"),
+        embedding_model=os.getenv("EMBEDDING_MODEL", {
+            "huggingface": "all-MiniLM-L6-v2",
+            "openai": "text-embedding-3-small",
+            "cohere": "embed-english-v3.0",
+        }.get(embedding_provider, "all-MiniLM-L6-v2")),
         openai_api_key=os.getenv("OPENAI_API_KEY", ""),
+        cohere_api_key=os.getenv("COHERE_API_KEY", ""),
         vector_store_provider=vector_store_provider,
         collection_name="nexus_documents",
         pinecone_api_key=os.getenv("PINECONE_API_KEY", ""),
