@@ -1,0 +1,84 @@
+# ============================================================
+# NEXUS AI Backend — Python Dependencies
+# Install: pip install -r requirements.txt
+# ============================================================
+
+# --- WEB FRAMEWORK ---
+fastapi==0.115.5
+uvicorn[standard]==0.32.1      # ASGI server (runs FastAPI)
+python-multipart==0.0.12       # File uploads
+mangum==0.17.0                 # ASGI adapter for Vercel/Lambda
+
+# --- DATA VALIDATION ---
+pydantic==2.10.3               # Request/response validation
+pydantic-settings==2.6.1       # Settings from .env
+
+# --- DATABASE ---
+sqlalchemy==2.0.36             # ORM (maps Python classes to DB tables)
+alembic==1.14.0                # Database migrations
+asyncpg==0.30.0                # Async PostgreSQL driver
+psycopg2-binary==2.9.10        # Sync PostgreSQL driver
+
+# --- AUTHENTICATION ---
+python-jose[cryptography]==3.3.0   # JWT tokens
+passlib[bcrypt]==1.7.4             # Password hashing
+bcrypt==4.0.1                      # Pinned: passlib incompatible with bcrypt>=4.1
+python-dotenv==1.0.1               # Load .env files
+
+# --- RATE LIMITING ---
+slowapi==0.1.9                 # Rate limiting for FastAPI/Starlette
+
+# --- CACHE + QUEUE ---
+redis==5.2.1                   # Redis client
+celery==5.4.0                  # Background task queue
+flower==2.0.1                  # Celery monitoring dashboard
+
+# --- LLM + AI CORE ---
+openai==1.57.0                 # OpenAI SDK (also used for Groq — same interface!)
+groq==0.13.1                   # Groq API client (FREE fast inference)
+anthropic==0.40.0              # Anthropic/Claude (optional alternative)
+tiktoken==0.8.0                # Tokenizer (count tokens before sending to LLM)
+
+# --- LANGCHAIN ECOSYSTEM ---
+langchain==0.3.13              # Core LangChain
+langchain-openai==0.2.14       # LangChain + OpenAI/Groq integration
+langchain-community==0.3.13    # Community integrations (HuggingFace, etc.)
+langchain-core==0.3.28         # Core abstractions
+langchain-groq==0.2.3          # LangChain + Groq integration
+langgraph==0.2.60              # Multi-agent state machines
+
+# --- VECTOR DATABASE ---
+chromadb==0.6.0                # Local vector database
+pinecone-client==5.0.1         # Production vector database
+
+# --- EMBEDDINGS ---
+sentence-transformers==3.3.1   # Local embedding models (HuggingFace)
+
+# --- DOCUMENT PROCESSING ---
+pypdf==5.1.0                   # PDF parsing
+python-docx==1.1.2             # Word document parsing
+unstructured==0.16.11          # Universal document parser
+beautifulsoup4==4.12.3         # HTML parsing (for URLs)
+requests==2.32.3               # HTTP client
+
+# --- TEXT PROCESSING ---
+nltk==3.9.1                    # Natural language toolkit
+rank-bm25==0.2.2               # BM25 for hybrid search
+
+# --- MONITORING + OBSERVABILITY ---
+langfuse==2.53.3               # LLM tracing and evaluation
+loguru==0.7.3                  # Structured logging (better than print!)
+sentry-sdk[fastapi]==2.19.2    # Error tracking
+
+# --- EVALUATION ---
+ragas==0.2.8                   # RAG evaluation framework
+
+# --- TESTING ---
+pytest==8.3.4
+pytest-asyncio==0.25.0
+httpx==0.28.1                  # Test HTTP client for FastAPI
+
+# --- UTILITIES ---
+python-slugify==8.0.4          # URL-friendly strings
+Pillow==11.0.0                 # Image processing
+aiofiles==24.1.0               # Async file operations
