@@ -150,29 +150,42 @@ class RAGPipeline:
 
     # ── Querying ──────────────────────────────────────────────────────────
 
-    def query(
-        self,
-        question: str,
-        where: Optional[dict] = None,
-    ) -> GenerationResult:
-        logger.info(f"Query: '{question[:80]}...' " if len(question) > 80 else f"Query: '{question}'")
-
-        # Embed the query
+    def _retrieve(self, question: str, where: Optional[dict] = None):
+        """
+        Embed → dense search → hybrid merge → rerank.
+        Extracted so both query() and query_stream() share the same logic.
+        Returns the final reranked list of SearchResult objects.
+        """
         query_embedding = self.embedder.embed_text(question)
 
-        # Dense retrieval
         dense_results = self.vector_store.search(
             query_embedding=query_embedding,
             top_k=self.retrieval_top_k,
             where=where,
         )
 
-        # Hybrid: merge with BM25
         if self.use_hybrid_search:
             sparse_results = self.bm25_index.search(question, top_k=self.retrieval_top_k)
             results = reciprocal_rank_fusion(dense_results, sparse_results)
         else:
             results = dense_results
+
+        if not results:
+            return []
+
+        if self.reranker and len(results) > 1:
+            return self.reranker.rerank(question, results, top_k=self.rerank_top_k)
+        return results[:self.rerank_top_k]
+
+    def query(
+        self,
+        question: str,
+        where: Optional[dict] = None,
+        history: Optional[list] = None,
+    ) -> GenerationResult:
+        logger.info(f"Query: '{question[:80]}'" if len(question) <= 80 else f"Query: '{question[:80]}...'")
+
+        results = self._retrieve(question, where=where)
 
         if not results:
             logger.warning("No results retrieved — knowledge base may be empty")
@@ -182,20 +195,13 @@ class RAGPipeline:
                 model="none",
             )
 
-        # Rerank
-        if self.reranker and len(results) > 1:
-            results = self.reranker.rerank(question, results, top_k=self.rerank_top_k)
-        else:
-            results = results[:self.rerank_top_k]
-
-        # Generate answer
         result = self.generator.generate(
             query=question,
             context_results=results,
+            history=history,
         )
 
-        logger.info(f"Generated answer: {result.prompt_tokens} prompt tokens, "
-                    f"{result.completion_tokens} completion tokens")
+        logger.info(f"Answer: {result.prompt_tokens} prompt + {result.completion_tokens} completion tokens")
         return result
 
     # ── Info ──────────────────────────────────────────────────────────────

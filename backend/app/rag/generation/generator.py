@@ -74,6 +74,7 @@ class GroqGenerator:
         self,
         query: str,
         context_results: List[SearchResult],
+        history: List[dict] | None = None,
         system_prompt: str = SYSTEM_PROMPT,
     ) -> GenerationResult:
         context_text = format_context(context_results)
@@ -82,12 +83,14 @@ class GroqGenerator:
             question=query,
         )
 
+        messages = [{"role": "system", "content": system_prompt}]
+        if history:
+            messages.extend(history)
+        messages.append({"role": "user", "content": user_message})
+
         response = self._client.chat.completions.create(
             model=self._model,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_message},
-            ],
+            messages=messages,
             temperature=self._temperature,
             max_tokens=self._max_tokens,
         )
@@ -111,3 +114,42 @@ class GroqGenerator:
             prompt_tokens=usage.prompt_tokens,
             completion_tokens=usage.completion_tokens,
         )
+
+    def generate_stream(
+        self,
+        query: str,
+        context_results: List[SearchResult],
+        history: List[dict] | None = None,
+        system_prompt: str = SYSTEM_PROMPT,
+    ):
+        """
+        Yields text tokens one-by-one as they arrive from Groq.
+        Each yield is a string fragment (a few chars or a word).
+        The caller wraps this in an SSE response.
+        """
+        context_text = format_context(context_results)
+        user_message = CONTEXT_TEMPLATE.format(
+            context_blocks=context_text,
+            question=query,
+        )
+
+        messages = [{"role": "system", "content": system_prompt}]
+
+        # Inject conversation history before the current question
+        if history:
+            messages.extend(history)
+
+        messages.append({"role": "user", "content": user_message})
+
+        stream = self._client.chat.completions.create(
+            model=self._model,
+            messages=messages,
+            temperature=self._temperature,
+            max_tokens=self._max_tokens,
+            stream=True,          # ← key flag: returns iterator instead of full response
+        )
+
+        for chunk in stream:
+            token = chunk.choices[0].delta.content
+            if token:             # last chunk has content=None
+                yield token

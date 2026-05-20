@@ -9,17 +9,19 @@ Responsibilities:
 """
 
 import asyncio
+import json
 import os
 import uuid
-from functools import lru_cache
 from pathlib import Path
 from typing import Optional
 
 from loguru import logger
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.models.document import Document, DocumentStatus
+from app.models.conversation import Conversation, Message
 from app.rag.pipeline import RAGPipeline
 from app.schemas.chat import QueryResponse, SourceReference
 
@@ -137,15 +139,15 @@ class RAGService:
         self,
         question: str,
         document_id: Optional[str] = None,
+        history: Optional[list[dict]] = None,
     ) -> QueryResponse:
         pipeline = get_pipeline()
-
         where = {"document_id": document_id} if document_id else None
 
         loop = asyncio.get_event_loop()
         result = await loop.run_in_executor(
             None,
-            lambda: pipeline.query(question, where=where)
+            lambda: pipeline.query(question, where=where, history=history)
         )
 
         return QueryResponse(
@@ -164,6 +166,167 @@ class RAGService:
             completion_tokens=result.completion_tokens,
             question=question,
         )
+
+    async def query_stream(
+        self,
+        question: str,
+        document_id: Optional[str] = None,
+        history: Optional[list[dict]] = None,
+    ):
+        """
+        Async generator that yields SSE-formatted strings.
+        Runs retrieval in thread pool, then streams generation token-by-token.
+
+        SSE format:
+            data: <token>\n\n         ← each token chunk
+            data: [SOURCES]<json>\n\n ← final event with citations
+            data: [DONE]\n\n          ← end marker
+        """
+        pipeline = get_pipeline()
+        where = {"document_id": document_id} if document_id else None
+
+        # Retrieval + reranking (CPU-bound → thread pool)
+        loop = asyncio.get_event_loop()
+        context_results = await loop.run_in_executor(
+            None,
+            lambda: pipeline._retrieve(question, where=where),
+        )
+
+        sources = [
+            {
+                "chunk_id": r.chunk_id,
+                "source": r.metadata.get("source", ""),
+                "page": r.metadata.get("page"),
+                "score": round(r.score, 4),
+            }
+            for r in context_results
+        ]
+
+        # Stream generation — runs in thread pool to avoid blocking event loop
+        def _stream_tokens():
+            return list(pipeline.generator.generate_stream(
+                query=question,
+                context_results=context_results,
+                history=history or [],
+            ))
+
+        # Collect tokens from thread pool, yield to client
+        # For true token-by-token streaming we use run_in_executor with a queue
+        import queue
+        import threading
+
+        token_queue: queue.Queue = queue.Queue()
+
+        def producer():
+            try:
+                for token in pipeline.generator.generate_stream(
+                    query=question,
+                    context_results=context_results,
+                    history=history or [],
+                ):
+                    token_queue.put(token)
+            finally:
+                token_queue.put(None)   # sentinel = done
+
+        thread = threading.Thread(target=producer, daemon=True)
+        thread.start()
+
+        while True:
+            # Poll queue without blocking event loop
+            try:
+                token = token_queue.get_nowait()
+            except queue.Empty:
+                await asyncio.sleep(0.01)
+                continue
+
+            if token is None:
+                break
+            yield f"data: {token}\n\n"
+
+        yield f"data: [SOURCES]{json.dumps(sources)}\n\n"
+        yield "data: [DONE]\n\n"
+
+    # ── Conversation helpers ──────────────────────────────────────────
+
+    async def create_conversation(
+        self,
+        db: AsyncSession,
+        user_id: int,
+        title: str = "New Conversation",
+        document_id: Optional[str] = None,
+    ) -> Conversation:
+        conv = Conversation(
+            conversation_id=str(uuid.uuid4()),
+            user_id=user_id,
+            title=title,
+            document_id=document_id,
+        )
+        db.add(conv)
+        await db.commit()
+        await db.refresh(conv)
+        return conv
+
+    async def get_conversation(
+        self, db: AsyncSession, conversation_id: str, user_id: int
+    ) -> Optional[Conversation]:
+        result = await db.execute(
+            select(Conversation)
+            .where(
+                Conversation.conversation_id == conversation_id,
+                Conversation.user_id == user_id,
+            )
+            .options(selectinload(Conversation.messages))
+        )
+        return result.scalar_one_or_none()
+
+    async def list_conversations(self, db: AsyncSession, user_id: int) -> list[Conversation]:
+        result = await db.execute(
+            select(Conversation)
+            .where(Conversation.user_id == user_id)
+            .options(selectinload(Conversation.messages))
+            .order_by(Conversation.updated_at.desc())
+        )
+        return list(result.scalars().all())
+
+    async def delete_conversation(self, db: AsyncSession, conversation_id: str, user_id: int) -> bool:
+        conv = await self.get_conversation(db, conversation_id, user_id)
+        if not conv:
+            return False
+        await db.delete(conv)
+        await db.commit()
+        return True
+
+    async def add_message(
+        self,
+        db: AsyncSession,
+        conversation_id: str,
+        role: str,
+        content: str,
+        sources: Optional[list] = None,
+        prompt_tokens: int = 0,
+        completion_tokens: int = 0,
+    ) -> Message:
+        msg = Message(
+            message_id=str(uuid.uuid4()),
+            conversation_id=conversation_id,
+            role=role,
+            content=content,
+            sources=json.dumps(sources) if sources else None,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+        )
+        db.add(msg)
+        # bump conversation updated_at
+        await db.execute(
+            select(Conversation).where(Conversation.conversation_id == conversation_id)
+        )
+        await db.commit()
+        await db.refresh(msg)
+        return msg
+
+    def _build_history(self, messages: list[Message]) -> list[dict]:
+        """Convert ORM Message rows into the list[dict] format Groq expects."""
+        return [{"role": m.role, "content": m.content} for m in messages]
 
     # ── Document DB helpers ───────────────────────────────────────────
 

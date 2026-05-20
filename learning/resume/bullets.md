@@ -94,6 +94,24 @@ HuggingFace · sentence-transformers · SQLAlchemy · JWT · WebSockets · RAGAS
   (RAGService) enabling independent testing and multi-channel invocation
 ```
 
+### Day 4 additions
+```
+• Implemented JWT authentication with dual-token strategy (30-min access + 7-day
+  refresh), bcrypt password hashing, and FastAPI dependency injection for
+  zero-boilerplate route protection
+
+• Built real-time LLM token streaming using Server-Sent Events — bridged
+  synchronous Groq streaming API to async FastAPI via threading.Queue producer/
+  consumer pattern, achieving sub-300ms time-to-first-token
+
+• Designed multi-turn conversation system with persistent message history stored
+  in SQLite; injects full conversation context into LLM messages array enabling
+  coherent multi-turn RAG responses
+
+• Added IP-based rate limiting (slowapi) with per-endpoint limits (20 req/min
+  for query, 10 req/min for streaming) returning RFC-compliant 429 responses
+```
+
 ### For "AI/ML Engineer" roles
 Lead with: RAG pipeline, RAGAS evaluation, embedding models, hybrid search, reranking
 

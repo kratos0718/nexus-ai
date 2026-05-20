@@ -261,21 +261,58 @@ A: Prefix all routes with `/api/v1/`. When breaking changes are needed, add `/ap
 **Q80. What is the difference between 401 Unauthorized and 403 Forbidden?**  
 A: 401 = "Who are you? Prove your identity." — no valid authentication token provided. Client should re-authenticate (login again). 403 = "I know who you are, but you can't do this." — authenticated but not authorized (e.g., regular user trying to delete another user's document). In our project (Day 5): 401 when JWT is missing or expired, 403 when the user tries to access another user's knowledge base.
 
-## SECTION 6: AGENTS & LANGCHAIN (Q81–Q95)
+## SECTION 6: AUTH, STREAMING & CONVERSATION (Q81–Q95)
 
-*[To be completed on Day 6-10]*
+**Q81. What is JWT and how does it work?**
+A: JSON Web Token — a self-contained token with Header.Payload.Signature. The server signs the payload with a secret key using HMAC-SHA256. The client sends it on every request. The server verifies the signature without any DB lookup — this is what makes it stateless and scalable. If the signature is valid and the token isn't expired, the server trusts the claims inside.
+
+**Q82. What's the difference between access tokens and refresh tokens?**
+A: Access token: short-lived (30 min), used on every API call. Refresh token: long-lived (7 days), used ONLY to get new access tokens. The split limits damage from theft — stolen access token is only usable for 30 minutes. Refresh token rotation means each refresh call issues a new refresh token.
+
+**Q83. How do you prevent user enumeration in a login endpoint?**
+A: Return the same error message and same HTTP status for "wrong email" and "wrong password". If you return 404 for unknown email and 401 for wrong password, attackers can determine valid emails. In our code: `if not user or not verify_password(...)` → single 401 with "Invalid email or password".
+
+**Q84. Why is bcrypt slow? Isn't slow bad?**
+A: Slow is intentional. bcrypt's cost factor (we use 12 = 4096 rounds) makes each hash take ~300ms. For normal users logging in, 300ms is imperceptible. But for attackers cracking a stolen DB: at 10 billion hashes/second for SHA-256, bcrypt cuts that to ~2.4 million/second. Makes brute force practically infeasible.
+
+**Q85. What is FastAPI's dependency injection and why use it?**
+A: `Depends()` is FastAPI's DI system. Functions declared as dependencies are called before the endpoint and their return values are injected. Benefits: (1) Shared logic runs once per request, even if multiple dependencies need it (e.g., DB session created once). (2) Makes auth trivial — just add `current_user: User = Depends(get_current_user)`. (3) Dependencies are testable and overridable in tests via `app.dependency_overrides`.
+
+**Q86. What is Server-Sent Events (SSE) and when do you use it?**
+A: SSE is a one-directional HTTP stream: server pushes data to client indefinitely on a single HTTP connection. Use it when you need real-time server-to-client updates: LLM streaming, live dashboards, notifications. Simpler than WebSockets because it's unidirectional — no handshake protocol, works through any HTTP proxy, browser auto-reconnects. Use WebSockets only when you need bidirectional communication.
+
+**Q87. How do you stream an LLM response in FastAPI?**
+A: Return `StreamingResponse(async_generator, media_type="text/event-stream")`. The async generator yields SSE-formatted strings (`"data: {token}\n\n"`). Challenge: Groq streaming is synchronous — solve with threading.Queue bridge: producer thread calls Groq and puts tokens in queue; async consumer polls queue with `get_nowait()` and `asyncio.sleep(0.01)` to yield tokens without blocking the event loop.
+
+**Q88. What does `run_in_executor` do and when is it needed?**
+A: Offloads a synchronous blocking function to a thread pool, making it awaitable. Needed when you have CPU-bound or IO-blocking sync code in an async context. Without it, running embedding inference or ChromaDB queries in an async endpoint would block the entire event loop, preventing all other requests from being served. `await loop.run_in_executor(None, sync_fn)` submits to the default ThreadPoolExecutor and returns a Future.
+
+**Q89. How do you implement multi-turn conversation with an LLM?**
+A: Inject conversation history as messages before the current question. The Groq/OpenAI API takes a `messages` list: `[{role: "system", content: ...}, {role: "user", content: turn1}, {role: "assistant", content: ans1}, {role: "user", content: current_question}]`. The model re-reads everything and responds with full context. Cost: token count grows with history. Production: use sliding window or summarization to bound context length.
+
+**Q90. How do you design a conversation storage schema?**
+A: Two tables: `Conversation` (conversation_id, user_id FK, title, document_id, timestamps) and `Message` (message_id, conversation_id FK, role, content, sources JSON, token counts, created_at). One-to-many relationship. Load messages with `selectinload()` to avoid N+1. Store sources as JSON string in the message for citation replay. Index conversation_id on both tables.
+
+**Q91. What is rate limiting and how does slowapi implement it?**
+A: Rate limiting caps requests per unit time per key (usually IP or user ID). Prevents abuse and DoS. slowapi wraps the `limits` library with FastAPI/Starlette compatibility. Decorator approach: `@limiter.limit("20/minute")` on the endpoint function. When exceeded: 429 Too Many Requests. Key function `get_remote_address` extracts client IP from X-Forwarded-For header (behind proxy) or direct connection IP.
+
+**Q92. What headers are required for proper SSE streaming through nginx?**
+A: `X-Accel-Buffering: no` — tells nginx not to buffer the response (without this, nginx collects everything before forwarding, breaking streaming). `Cache-Control: no-cache` — prevents any intermediate cache from storing. `Connection: keep-alive` — keeps the HTTP connection open. Content-Type must be `text/event-stream`.
+
+**Q93. How do you handle token expiry gracefully on the client?**
+A: On receiving 401, check if it's from an expired access token. If so, call `/auth/refresh` with the refresh token to get a new access token. Retry the original request with the new token. If refresh also fails (refresh expired or revoked), redirect to login. Implement this as an HTTP interceptor (axios interceptor, fetch wrapper) so all API calls benefit automatically.
+
+**Q94. What's wrong with storing JWTs in localStorage?**
+A: localStorage is accessible by any JavaScript on the page. XSS attacks (injected scripts from third-party dependencies, ads, etc.) can read and exfiltrate the token. HttpOnly cookies cannot be accessed by JavaScript — even if XSS runs, it can't steal the cookie. Downside of cookies: requires CSRF protection (SameSite=Strict handles this). In practice, many SPAs still use localStorage and compensate with strict CSP headers.
+
+**Q95. How do you test protected endpoints?**
+A: In FastAPI tests, use `app.dependency_overrides` to inject a mock user directly, bypassing JWT verification. In integration tests, call `/auth/register` and `/auth/login` to get a real token, then include `Authorization: Bearer <token>` in test requests. Never hardcode credentials in tests — use fixtures or environment variables.
 
 ---
 
-## SECTION 5: BACKEND & APIS (Q66–Q80)
+## SECTION 7: SYSTEM DESIGN (Q96–Q100)
 
-*[To be completed on Day 11-14]*
-
----
-
-## SECTION 6: MLOPS & DEPLOYMENT (Q81–Q95)
-
-*[To be completed on Day 17-22]*
+*[To be completed on Day 23-25]*
 
 ---
 

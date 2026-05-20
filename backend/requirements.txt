@@ -23,6 +23,9 @@ python-jose[cryptography]==3.3.0   # JWT tokens
 passlib[bcrypt]==1.7.4             # Password hashing
 python-dotenv==1.0.1               # Load .env files
 
+# --- RATE LIMITING ---
+slowapi==0.1.9                 # Rate limiting for FastAPI/Starlette
+
 # --- CACHE + QUEUE ---
 redis==5.2.1                   # Redis client
 celery==5.4.0                  # Background task queue

@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 class QueryRequest(BaseModel):
     question: str = Field(..., min_length=3, max_length=2000)
     document_id: Optional[str] = Field(None, description="Limit search to one document")
+    conversation_id: Optional[str] = Field(None, description="Continue an existing conversation")
     top_k: int = Field(5, ge=1, le=20)
     use_reranking: bool = True
     use_hybrid: bool = True

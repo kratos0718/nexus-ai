@@ -10,9 +10,16 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from loguru import logger
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 
 from app.core.database import create_tables
 from app.api.v1.router import api_router
+
+# Global rate limiter — keyed by client IP
+# Limits are applied per-route with @limiter.limit("N/period")
+limiter = Limiter(key_func=get_remote_address)
 
 
 @asynccontextmanager
@@ -20,11 +27,9 @@ async def lifespan(app: FastAPI):
     # ── Startup ──────────────────────────────────────────────────────────
     logger.info("Starting Nexus AI...")
 
-    # Create SQLite tables (idempotent — safe to run every time)
     await create_tables()
     logger.info("Database tables ready")
 
-    # Create uploads directory
     os.makedirs("./uploads", exist_ok=True)
 
     logger.info("Nexus AI ready. Visit http://localhost:8000/docs")
@@ -41,6 +46,9 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# Attach limiter to app state so slowapi can find it
+app.state.limiter = limiter
+
 # ── Middleware ────────────────────────────────────────────────────────────
 app.add_middleware(
     CORSMiddleware,
@@ -49,6 +57,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Return 429 with a clear message when rate limit is exceeded
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 
 # ── Global exception handler ──────────────────────────────────────────────
