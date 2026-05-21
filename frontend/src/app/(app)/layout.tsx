@@ -22,6 +22,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     { href: "/dashboard", label: "Documents", icon: "📄" },
     { href: "/chat", label: "Chat", icon: "💬" },
     { href: "/observability", label: "Observability", icon: "📊" },
+    { href: "/system-prompts", label: "Personas", icon: "🎭" },
   ];
 
   return (

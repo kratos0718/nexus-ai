@@ -66,3 +66,11 @@ export interface ChatMessage {
   sources?: SourceReference[];
   streaming?: boolean;
 }
+
+export interface SystemPrompt {
+  id: number;
+  name: string;
+  description: string | null;
+  content: string;
+  created_at: string;
+}

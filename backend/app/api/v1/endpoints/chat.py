@@ -11,16 +11,29 @@ import time
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 
 from app.core.database import get_db
 from app.core.dependencies import rate_limit_user
 from app.core.security_guard import security_guard
 from app.models.user import User
+from app.models.system_prompt import SystemPrompt
 from app.services.rag_service import rag_service
 from app.services.trace_service import trace_service
 from app.schemas.chat import QueryRequest, QueryResponse
 
 router = APIRouter()
+
+
+async def _resolve_system_prompt(db: AsyncSession, prompt_id: int | None, user_id: int) -> str | None:
+    """Look up a saved system prompt by ID, verifying ownership. Returns content or None."""
+    if not prompt_id:
+        return None
+    result = await db.execute(
+        select(SystemPrompt).where(SystemPrompt.id == prompt_id, SystemPrompt.user_id == user_id)
+    )
+    sp = result.scalar_one_or_none()
+    return sp.content if sp else None
 
 
 @router.post("/query", response_model=QueryResponse)
@@ -50,6 +63,7 @@ async def query(
 
     history = None
     conversation = None
+    system_prompt_content = await _resolve_system_prompt(db, request.system_prompt_id, current_user.id)
 
     if request.conversation_id:
         conversation = await rag_service.get_conversation(db, request.conversation_id, current_user.id)
@@ -64,6 +78,7 @@ async def query(
             document_id=request.document_id,
             history=history,
             retrieval_mode=request.retrieval_mode,
+            system_prompt=system_prompt_content,
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Query failed: {str(e)}")
@@ -129,6 +144,8 @@ async def query_stream(
             raise HTTPException(status_code=404, detail="Document not found")
 
     history = None
+    system_prompt_content = await _resolve_system_prompt(db, request.system_prompt_id, current_user.id)
+
     if request.conversation_id:
         conversation = await rag_service.get_conversation(db, request.conversation_id, current_user.id)
         if not conversation:
@@ -140,6 +157,7 @@ async def query_stream(
             question=question,
             document_id=request.document_id,
             history=history,
+            system_prompt=system_prompt_content,
         ),
         media_type="text/event-stream",
         headers={

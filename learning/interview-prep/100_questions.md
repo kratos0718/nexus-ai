@@ -895,3 +895,28 @@ A: Three approaches: (1) Visual inspection — open the Knowledge Base Explorer 
 
 **Q268. When would you choose semantic chunking over recursive in a production RAG system?**
 A: Choose semantic when: (1) documents lack structural markers (no `\n\n` paragraph breaks) — raw OCR output, speech transcripts, web scrapes; (2) documents are dense with rapid topic shifts within paragraphs — some technical papers, legal contracts, medical records; (3) retrieval precision is more important than indexing speed — the extra embedding compute at indexing time is acceptable for the quality gain. Choose recursive by default for well-structured documents (Markdown, PDFs with clear sections) and when indexing latency matters.
+
+---
+
+## Day 20 — System Prompts & Prompt Engineering
+
+**Q269. What is a system prompt and what can it control?**
+A: A system prompt is a persistent instruction placed before the user's message in the LLM's context. It can set the model's role ("You are a legal analyst"), restrict behavior ("Answer only from provided documents"), define output format ("Reply in bullet points"), and specify fallback phrasing ("If you don't know, say so"). It applies to every turn without the user repeating it.
+
+**Q270. Why use user-defined system prompts instead of a single hardcoded one?**
+A: Different use cases need different model behavior. A legal document assistant needs precision and clause citations; a tutoring assistant needs patience and simpler language. User-defined system prompts let one RAG system serve many roles without code changes. The model's behavior becomes runtime-configurable rather than compile-time fixed.
+
+**Q271. How do you prevent prompt injection through a user-controlled system_prompt field?**
+A: Apply content length limits, strip control characters, and validate the content against a policy before saving. You can also prefix it with a meta-instruction that the user cannot override: placing your own hard constraints above their content. Treat user-defined system prompts as untrusted input — sanitize before storing, log for review.
+
+**Q272. In a multi-tenant API, how do you scope resources to the authenticated user?**
+A: Every database query includes `WHERE user_id = current_user.id`. For reads and mutations, a `_get_owned()` helper fetches by both the resource ID and user_id — if nothing is returned, raise 404 regardless of whether the row exists under a different user. This avoids leaking resource existence via 403 vs 404 differential (403 would tell an attacker "this ID exists but you can't access it").
+
+**Q273. What is the `or` fallback pattern for optional LLM parameters?**
+A: `value or DEFAULT` treats both `None` and empty string as "use the default." It's safe when empty string is always invalid (like a blank system prompt is meaningless). It's unsafe when empty string is a valid distinct value — in that case use `if value is None: value = DEFAULT` instead. Nexus AI uses `system_prompt or SYSTEM_PROMPT` because a blank system prompt should fall back to the built-in default.
+
+**Q274. What is chain-of-thought prompting and why does it improve accuracy?**
+A: CoT prompting adds "Let's think step by step" or shows worked examples that include reasoning. This forces the model to emit intermediate reasoning tokens before the final answer. These tokens act as working memory in the attention mechanism and shift the probability distribution toward correct answers. Especially effective on math, logic, and multi-step reasoning tasks where the final answer depends on several intermediate steps.
+
+**Q275. What is few-shot prompting and when does it outperform zero-shot?**
+A: Few-shot provides labeled input/output examples before the real task. The model learns in-context from these examples without weight updates. It outperforms zero-shot when the output format is non-standard (the model can see an example instead of imagining it), when the task is domain-specific with unusual vocabulary, or when zero-shot consistently gives wrong structure. Trade-off: each shot consumes context window tokens.

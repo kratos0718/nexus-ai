@@ -163,7 +163,7 @@ class RAGPipeline:
             return self.reranker.rerank(question, results, top_k=self.rerank_top_k)
         return results[:self.rerank_top_k]
 
-    def query(self, question: str, where: Optional[dict] = None, history: Optional[list] = None) -> GenerationResult:
+    def query(self, question: str, where: Optional[dict] = None, history: Optional[list] = None, system_prompt: Optional[str] = None) -> GenerationResult:
         logger.info(f"Query: '{question[:80]}'")
         results = self._retrieve(question, where=where)
 
@@ -174,7 +174,7 @@ class RAGPipeline:
                 model="none",
             )
 
-        return self.generator.generate(query=question, context_results=results, history=history)
+        return self.generator.generate(query=question, context_results=results, history=history, system_prompt=system_prompt)
 
     def stats(self) -> dict:
         return {

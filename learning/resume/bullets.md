@@ -455,3 +455,9 @@ Lead with: Next.js frontend, FastAPI backend, real-time WebSocket streaming
 
 ### For "AI Product" roles
 Lead with: user-facing AI features, streaming UX, citation system, multi-tenant architecture
+
+## Day 20 — System Prompts / Personas
+- Designed RESTful system prompt management API with per-user CRUD, ownership enforcement, and 404-ambiguity security pattern
+- Implemented LLM persona injection: system prompt resolved at query time, propagated through RAG pipeline to Groq generator
+- Built React settings page for persona management with inline create/edit/delete form and optimistic state updates
+- Added persona selector to chat toolbar; system prompt ID transmitted with SSE streaming requests

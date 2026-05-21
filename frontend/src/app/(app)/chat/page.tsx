@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
-import type { ChatMessage, Document, SourceReference, Conversation } from "@/types";
+import type { ChatMessage, Document, SourceReference, Conversation, SystemPrompt } from "@/types";
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
 
@@ -189,6 +189,8 @@ export default function ChatPage() {
   const [retrievalMode, setRetrievalMode] = useState<"standard" | "hyde" | "multiquery">("standard");
   const [ratings, setRatings] = useState<Record<string, 1 | -1>>({});
   const [questionMap, setQuestionMap] = useState<Record<string, string>>({});
+  const [personas, setPersonas] = useState<SystemPrompt[]>([]);
+  const [selectedPersonaId, setSelectedPersonaId] = useState<number | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -199,6 +201,9 @@ export default function ChatPage() {
     api.get<Conversation[]>("/conversations/").then(({ data }) =>
       setConversations(data)
     );
+    api.get<SystemPrompt[]>("/system-prompts/").then(({ data }) =>
+      setPersonas(data)
+    ).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -256,6 +261,7 @@ export default function ChatPage() {
           document_id: selectedDoc || null,
           conversation_id: convId,
           retrieval_mode: agentMode ? "standard" : retrievalMode,
+          system_prompt_id: !agentMode ? selectedPersonaId : null,
         }),
       });
 
@@ -420,6 +426,21 @@ export default function ChatPage() {
               <option value="standard">Standard retrieval</option>
               <option value="hyde">HyDE — hypothetical doc</option>
               <option value="multiquery">Multi-query expansion</option>
+            </select>
+          )}
+
+          {!agentMode && personas.length > 0 && (
+            <select
+              value={selectedPersonaId ?? ""}
+              onChange={(e) => setSelectedPersonaId(e.target.value ? Number(e.target.value) : null)}
+              className="text-xs px-2 py-1.5 rounded-lg border outline-none"
+              style={{ background: "var(--surface-2)", borderColor: "var(--border)", color: "var(--text)" }}
+              title="Persona (system prompt)"
+            >
+              <option value="">Default persona</option>
+              {personas.map((p) => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
             </select>
           )}
         </div>
