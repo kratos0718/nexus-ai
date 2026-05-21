@@ -10,10 +10,20 @@ interface Stats {
   avg_duration_ms: number;
   min_duration_ms: number;
   max_duration_ms: number;
+  p95_duration_ms: number;
   total_prompt_tokens: number;
   total_completion_tokens: number;
   total_tokens: number;
   estimated_cost_usd: number;
+}
+
+interface CacheStats {
+  redis_connected: boolean;
+  cached_queries: number;
+  hits: number;
+  misses: number;
+  hit_rate_pct: number;
+  redis_memory_mb: number;
 }
 
 interface FeedbackStats {
@@ -134,23 +144,37 @@ export default function ObservabilityPage() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [traces, setTraces] = useState<Trace[]>([]);
   const [feedback, setFeedback] = useState<FeedbackStats | null>(null);
+  const [cache, setCache] = useState<CacheStats | null>(null);
+  const [flushing, setFlushing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   async function fetchData() {
     try {
-      const [statsRes, tracesRes, feedbackRes] = await Promise.all([
+      const [statsRes, tracesRes, feedbackRes, cacheRes] = await Promise.all([
         api.get<Stats>("/traces/stats"),
         api.get<{ traces: Trace[]; count: number }>("/traces/"),
         api.get<FeedbackStats>("/feedback/stats"),
+        api.get<CacheStats>("/cache/stats"),
       ]);
       setStats(statsRes.data);
       setTraces(tracesRes.data.traces);
       setFeedback(feedbackRes.data);
+      setCache(cacheRes.data);
     } catch {
       setError("Failed to load observability data. Make sure the backend is running.");
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function flushCache() {
+    setFlushing(true);
+    try {
+      await api.delete("/cache/flush");
+      await fetchData();
+    } finally {
+      setFlushing(false);
     }
   }
 
@@ -264,6 +288,76 @@ export default function ObservabilityPage() {
         </div>
       )}
 
+      {/* Cache stats */}
+      {cache && (
+        <div
+          className="rounded-xl border p-5 mb-8"
+          style={{ background: "var(--surface)", borderColor: "var(--border)" }}
+        >
+          <div className="flex items-center justify-between mb-4">
+            <p className="text-xs font-medium uppercase tracking-wide" style={{ color: "var(--text-muted)" }}>
+              Query cache (Redis)
+            </p>
+            <div className="flex items-center gap-3">
+              <span
+                className="text-xs px-2 py-0.5 rounded-full"
+                style={{
+                  background: cache.redis_connected ? "#10b98120" : "#ef444420",
+                  color: cache.redis_connected ? "var(--success)" : "var(--danger)",
+                }}
+              >
+                {cache.redis_connected ? "Connected" : "Disconnected"}
+              </span>
+              <button
+                onClick={flushCache}
+                disabled={flushing || cache.cached_queries === 0}
+                className="text-xs px-3 py-1 rounded-lg border disabled:opacity-40 transition-opacity"
+                style={{ borderColor: "var(--border)", color: "var(--text-muted)" }}
+              >
+                {flushing ? "Flushing…" : "Flush cache"}
+              </button>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div>
+              <p className="text-xs mb-1" style={{ color: "var(--text-muted)" }}>Cached queries</p>
+              <p className="text-xl font-bold" style={{ color: "var(--text)" }}>{cache.cached_queries}</p>
+            </div>
+            <div>
+              <p className="text-xs mb-1" style={{ color: "var(--text-muted)" }}>Hit rate</p>
+              <p
+                className="text-xl font-bold"
+                style={{ color: cache.hit_rate_pct >= 50 ? "var(--success)" : "var(--text)" }}
+              >
+                {cache.hit_rate_pct}%
+              </p>
+              <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+                {cache.hits} hits · {cache.misses} misses
+              </p>
+            </div>
+            <div>
+              <p className="text-xs mb-1" style={{ color: "var(--text-muted)" }}>Redis memory</p>
+              <p className="text-xl font-bold" style={{ color: "var(--text)" }}>{cache.redis_memory_mb} MB</p>
+            </div>
+            <div>
+              <p className="text-xs mb-2" style={{ color: "var(--text-muted)" }}>Cache efficiency</p>
+              <div className="h-2 rounded-full" style={{ background: "var(--surface-2)" }}>
+                <div
+                  className="h-2 rounded-full transition-all"
+                  style={{
+                    width: `${Math.min(cache.hit_rate_pct, 100)}%`,
+                    background: cache.hit_rate_pct >= 50 ? "var(--success)" : "var(--accent)",
+                  }}
+                />
+              </div>
+              <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
+                {cache.hit_rate_pct >= 50 ? "Good" : cache.hit_rate_pct > 0 ? "Building up" : "No data yet"}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Error rate + latency range */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
         <div
@@ -276,6 +370,7 @@ export default function ObservabilityPage() {
           <div className="flex flex-col gap-3">
             <LatencyBar label="Min" ms={s.min_duration_ms} max={s.max_duration_ms} />
             <LatencyBar label="Avg" ms={s.avg_duration_ms} max={s.max_duration_ms} />
+            <LatencyBar label="P95" ms={s.p95_duration_ms} max={s.max_duration_ms} />
             <LatencyBar label="Max" ms={s.max_duration_ms} max={s.max_duration_ms} />
           </div>
         </div>

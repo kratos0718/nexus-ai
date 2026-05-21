@@ -473,3 +473,9 @@ Lead with: user-facing AI features, streaming UX, citation system, multi-tenant 
 - Configured separate liveness (/ping) and readiness (/health) probes; Railway healthcheck with 300s cold-start timeout for ML model loading
 - Extended GitHub Actions CI to a full CD pipeline: push to main → tests pass → Railway auto-deploys both services
 - Created production environment setup guide with Railway plugin variable injection and CORS configuration
+
+## Day 23 — Redis Caching & Performance
+- Instrumented Redis query cache with atomic hit/miss counters (INCR); built cache stats API and observability dashboard panel
+- Fixed production safety: replaced blocking KEYS with non-blocking SCAN for all cache pattern operations
+- Added P95 latency percentile to trace stats endpoint (Python sort-based, SQLite-compatible); displayed in latency range chart
+- Built cache management UI: Redis connected indicator, hit rate progress bar, entry count, manual flush with live refresh

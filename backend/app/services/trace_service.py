@@ -78,8 +78,9 @@ class TraceService:
         user_id: Optional[int] = None,
     ) -> dict:
         """
-        Aggregate stats: total calls, tokens, average latency, error rate.
-        Returns a plain dict — suitable for JSON response directly.
+        Aggregate stats: total calls, tokens, latency percentiles, error rate.
+        P95 is computed in Python after fetching all durations — acceptable for
+        typical trace counts (thousands, not millions).
         """
         q = select(
             func.count(LLMTrace.id).label("total_calls"),
@@ -96,6 +97,13 @@ class TraceService:
 
         row = (await db.execute(q)).one()
 
+        # Fetch all durations to compute P95 (SQLite-compatible; no percentile_cont)
+        dur_q = select(LLMTrace.duration_ms)
+        if user_id is not None:
+            dur_q = dur_q.where(LLMTrace.user_id == user_id)
+        durations = sorted((await db.execute(dur_q)).scalars().all())
+        p95 = durations[int(0.95 * len(durations))] if durations else 0.0
+
         total = row.total_calls or 1  # avoid div-by-zero
         return {
             "total_calls": row.total_calls,
@@ -105,6 +113,7 @@ class TraceService:
             "avg_duration_ms": round(float(row.avg_duration_ms), 1),
             "min_duration_ms": round(float(row.min_duration_ms), 1),
             "max_duration_ms": round(float(row.max_duration_ms), 1),
+            "p95_duration_ms": round(float(p95), 1),
             "error_count": row.error_count,
             "error_rate_pct": round(row.error_count / total * 100, 1),
             # Rough cost estimate: Groq free tier, but useful for OpenAI users
