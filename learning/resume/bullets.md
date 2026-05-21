@@ -479,3 +479,9 @@ Lead with: user-facing AI features, streaming UX, citation system, multi-tenant 
 - Fixed production safety: replaced blocking KEYS with non-blocking SCAN for all cache pattern operations
 - Added P95 latency percentile to trace stats endpoint (Python sort-based, SQLite-compatible); displayed in latency range chart
 - Built cache management UI: Redis connected indicator, hit rate progress bar, entry count, manual flush with live refresh
+
+## Day 24 — Test Suite Expansion & README Polish
+- Expanded pytest suite to 10 test modules (80+ tests); wrote unit tests for JWT/bcrypt (13 cases) and rate limiter with mocked Redis (10 cases) without requiring any live services
+- Tested cache admin and observability endpoints with mocked Redis using `unittest.mock.patch`; verified graceful degradation paths (Redis down → 200 with zeros, not 500)
+- Applied ownership-isolation testing pattern: confirmed unowned resources return 404 not 403 to prevent resource enumeration attacks
+- Rewrote README with CI badge, 24-endpoint API reference table, Testing section, and architecture diagram — production-quality documentation for recruiter portfolio review

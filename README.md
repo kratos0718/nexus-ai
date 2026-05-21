@@ -2,6 +2,7 @@
 
 > Upload any documents. Ask complex questions in plain English. Get accurate answers with citations — powered by a multi-agent AI pipeline.
 
+[![CI](https://github.com/kratos0718/nexus-ai/actions/workflows/ci.yml/badge.svg)](https://github.com/kratos0718/nexus-ai/actions/workflows/ci.yml)
 [![Python](https://img.shields.io/badge/Python-3.11-blue)](https://python.org)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115-green)](https://fastapi.tiangolo.com)
 [![Next.js](https://img.shields.io/badge/Next.js-15-black)](https://nextjs.org)
@@ -23,7 +24,7 @@
 │  │  • Chat (stream) │          └──────────────┬───────────────────┘  │
 │  │  • Documents     │                         │                      │
 │  │  • Observability │          ┌──────────────▼───────────────────┐  │
-│  │  • KB Explorer   │          │       RAG Pipeline               │  │
+│  │  • Personas      │          │       RAG Pipeline               │  │
 │  └──────────────────┘          │  Ingest → Chunk → Embed          │  │
 │                                │  Retrieve (hybrid) → Rerank      │  │
 │                                │  Generate (Groq/Llama 3.3-70B)   │  │
@@ -49,47 +50,49 @@
 
 ### RAG Pipeline
 - **Multi-format ingestion** — PDF, DOCX, TXT, Markdown, URLs
-- **Recursive chunking** — 800-char chunks, 150-char overlap, configurable
+- **Three chunking strategies** — Recursive (default) · Semantic (embedding-based boundary detection) · Fixed-size
 - **Hybrid retrieval** — dense semantic search + sparse BM25, fused with Reciprocal Rank Fusion
-- **Cross-encoder reranking** — post-retrieval precision boost
-- **Advanced retrieval modes** — Standard | HyDE (Hypothetical Document Embeddings) | Multi-query expansion
-- **Source citations** — every answer traces to specific document chunks with confidence scores
+- **Cross-encoder reranking** — post-retrieval precision boost (sentence-transformers)
+- **Three retrieval modes** — Standard · HyDE (Hypothetical Document Embeddings) · Multi-query expansion
+- **Source citations** — every answer traces to specific chunks with confidence scores
 
 ### Multi-Agent System (LangGraph)
 - **Router** — classifies query complexity, routes simple vs complex with Pydantic structured output
 - **Planner** — decomposes complex questions into 2–4 targeted sub-questions
 - **Researcher** — parallel retrieval across knowledge base per sub-question
 - **Synthesizer** — combines context, generates grounded cited answer
-- Real-time step streaming — users see routing decisions and sub-questions as they happen
+- Real-time step streaming — routing decisions and sub-questions visible as they happen
 
 ### Backend (FastAPI)
-- JWT auth with 30-min access + 7-day refresh tokens, bcrypt password hashing
+- JWT auth — 30-min access + 7-day rotating refresh tokens, bcrypt password hashing
 - Redis query cache — repeat queries served in <5ms vs 3–4s LLM call (800× speedup)
-- Redis rate limiting — 100 req/hr per user with graceful Redis-down fallback
+- Redis rate limiting — 100 req/hr per user, graceful Redis-down fallback
 - Celery async document processing — instant 202 response, background indexing with retry
-- Server-Sent Events streaming — token-by-token real-time responses, <300ms TTFT
-- Request ID middleware — `X-Request-ID` header on every request for log correlation
-- Security guard — 11 prompt injection regex patterns, SSRF blocking, magic byte file validation
+- Server-Sent Events streaming — token-by-token responses, <300ms TTFT
+- Request ID middleware — `X-Request-ID` on every request for log correlation
+- Security guard — 11 prompt-injection regex patterns, SSRF blocking, magic-byte file validation
+- System prompts / Personas — per-user custom LLM roles, resolved at query time
 
 ### Observability & Evaluation
-- LLM trace table — every query logs tokens, latency, model, cost
-- Aggregate stats API — total calls, avg/min/max latency, token breakdown, error rate
-- Retrieval mode tracking — compare standard vs HyDE vs multi-query performance
+- LLM trace table — every query logs tokens, latency, model, cost estimate
+- Aggregate stats — total calls, min/avg/P95/max latency, token breakdown, error rate
+- Cache stats — hit rate, entry count, Redis memory usage, manual flush
 - RAGAS evaluation pipeline — Faithfulness 0.91 · Answer Relevancy 0.88 · Context Recall 0.85
+- RLHF feedback — thumbs up/down ratings, stats dashboard, JSONL export for fine-tuning
 
 ### Frontend (Next.js 15)
 - Streaming chat with SSE — tokens appear in real-time
 - Agent mode toggle — live routing badge and sub-question display
-- Retrieval mode selector — standard / HyDE / multi-query per query
-- Document management — upload files, index URLs, status polling
-- **Knowledge base explorer** — browse indexed chunks, run semantic search per document
-- **Observability dashboard** — latency bars, token stats, per-mode trace table
+- Retrieval mode + persona selector in toolbar
+- Document management — upload with chunking strategy picker, URL indexing, status polling
+- Knowledge base explorer — browse indexed chunks, run semantic search per document
+- Observability dashboard — latency bars (P95), token stats, cache panel, trace table
 
 ### DevOps
 - Docker Compose — one command local stack (FastAPI + PostgreSQL + Redis + ChromaDB)
-- GitHub Actions CI — full test suite on every push in ~90 seconds
-- Detailed `/health` endpoint — probes DB, Redis, pipeline, vector store independently
-- Provider abstraction — swap ChromaDB → Pinecone or HuggingFace → OpenAI via one env var
+- GitHub Actions CI/CD — lint → tests (coverage gate) → TypeScript → auto-deploy to Railway
+- Railway deployment — `backend/railway.toml` + `frontend/railway.toml` configs included
+- Liveness (`/ping`) + readiness (`/health`) probes — DB, Redis, pipeline, vector store
 
 ---
 
@@ -101,13 +104,14 @@
 # 1. Clone and configure
 git clone https://github.com/kratos0718/nexus-ai.git
 cd nexus-ai
-cp .env.example .env
-# Edit .env — add GROQ_API_KEY and JWT_SECRET_KEY
+cp backend/.env.example backend/.env
+# Edit backend/.env — add GROQ_API_KEY and JWT_SECRET_KEY
 
 # 2. Backend
 cd backend
-conda create -n nexus-ai python=3.11 -y && conda activate nexus-ai
+python -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
+alembic upgrade head
 uvicorn app.main:app --reload
 # → http://localhost:8000/docs
 
@@ -117,10 +121,10 @@ npm install && npm run dev
 # → http://localhost:3000
 ```
 
-> Infrastructure (PostgreSQL + Redis) is optional for local dev. The system uses SQLite and no-cache mode by default.
+> PostgreSQL and Redis are optional for local dev — the system falls back to SQLite and no-cache mode.
 
 ```bash
-# Start full infrastructure when needed
+# Start full infrastructure stack
 docker compose up postgres redis -d
 ```
 
@@ -128,36 +132,85 @@ docker compose up postgres redis -d
 
 ## API Reference
 
-| Method | Path | Description |
-|--------|------|-------------|
-| `POST` | `/api/v1/auth/register` | Create account |
-| `POST` | `/api/v1/auth/login` | Get JWT tokens |
-| `POST` | `/api/v1/documents/upload` | Upload and index a file |
-| `GET` | `/api/v1/documents/{id}/chunks` | Browse indexed chunks |
-| `POST` | `/api/v1/chat/stream` | Streaming answer (SSE) |
-| `POST` | `/api/v1/agent/stream` | Multi-agent streaming (SSE) |
-| `POST` | `/api/v1/search/` | Semantic search, no LLM |
-| `GET` | `/api/v1/traces/stats` | Token usage + latency stats |
-| `GET` | `/api/v1/eval/results/latest` | Latest RAGAS scores |
-| `GET` | `/health` | Subsystem health check |
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| `POST` | `/api/v1/auth/register` | — | Create account |
+| `POST` | `/api/v1/auth/login` | — | Get JWT tokens |
+| `POST` | `/api/v1/auth/refresh` | — | Rotate refresh token |
+| `GET` | `/api/v1/auth/me` | ✓ | Current user profile |
+| `POST` | `/api/v1/documents/upload` | ✓ | Upload + index a file |
+| `POST` | `/api/v1/documents/url` | ✓ | Index a URL |
+| `GET` | `/api/v1/documents/` | ✓ | List documents |
+| `DELETE` | `/api/v1/documents/{id}` | ✓ | Delete document + chunks |
+| `GET` | `/api/v1/documents/{id}/chunks` | ✓ | Browse indexed chunks |
+| `POST` | `/api/v1/chat/query` | ✓ | Ask question (blocking) |
+| `POST` | `/api/v1/chat/stream` | ✓ | Streaming answer (SSE) |
+| `POST` | `/api/v1/agent/stream` | ✓ | Multi-agent streaming (SSE) |
+| `POST` | `/api/v1/search/` | ✓ | Semantic search, no LLM |
+| `GET` | `/api/v1/conversations/` | ✓ | List conversations |
+| `POST` | `/api/v1/system-prompts/` | ✓ | Create persona |
+| `GET` | `/api/v1/system-prompts/` | ✓ | List personas |
+| `POST` | `/api/v1/feedback/` | ✓ | Submit answer rating |
+| `GET` | `/api/v1/feedback/stats` | ✓ | Rating stats |
+| `GET` | `/api/v1/feedback/export` | ✓ | Export ratings as JSONL |
+| `GET` | `/api/v1/traces/stats` | ✓ | Token usage + latency stats |
+| `GET` | `/api/v1/cache/stats` | ✓ | Cache hit rate + metrics |
+| `DELETE` | `/api/v1/cache/flush` | ✓ | Flush query cache |
+| `GET` | `/api/v1/eval/results/latest` | ✓ | Latest RAGAS scores |
+| `GET` | `/health` | — | Detailed subsystem health check |
+| `GET` | `/ping` | — | Liveness probe |
 
-Full interactive docs at `/docs` (Swagger UI).
+Full interactive docs at `http://localhost:8000/docs` (Swagger UI).
 
 ---
 
 ## Configuration
 
-See [`.env.example`](.env.example) for the complete reference with explanations.
-
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `GROQ_API_KEY` | **Yes** | — | LLM provider key |
-| `JWT_SECRET_KEY` | **Yes** | — | Token signing key |
+| `GROQ_API_KEY` | **Yes** | — | LLM provider (console.groq.com) |
+| `JWT_SECRET_KEY` | **Yes** | — | Token signing key (32+ chars) |
+| `SECRET_KEY` | **Yes** | — | App secret key (32+ chars) |
 | `DATABASE_URL` | No | SQLite | PostgreSQL for production |
 | `REDIS_URL` | No | — | Enables caching + rate limits |
 | `VECTOR_STORE_PROVIDER` | No | `chroma` | `chroma` or `pinecone` |
 | `EMBEDDING_PROVIDER` | No | `huggingface` | `huggingface` or `openai` |
-| `LOG_FORMAT` | No | `text` | `text` or `json` |
+| `ALLOWED_ORIGINS` | No | `localhost:3000` | CORS allowed origins |
+| `LOG_FORMAT` | No | `text` | `text` or `json` (prod) |
+
+See [`backend/.env.example`](backend/.env.example) and [`backend/.env.production.example`](backend/.env.production.example) for the full reference.
+
+---
+
+## Testing
+
+```bash
+cd backend
+
+# Run all tests
+pytest tests/ -v
+
+# Run with coverage report
+pytest tests/ --cov=app --cov-report=term-missing
+
+# Run a specific test file
+pytest tests/test_auth.py -v
+
+# Run tests matching keyword
+pytest tests/ -k "feedback" -v
+```
+
+The test suite uses **in-memory SQLite** — no external services needed. It covers:
+- Auth flows (register, login, refresh, token validation)
+- Document CRUD with ownership isolation
+- Conversation management
+- System prompts CRUD
+- Feedback submission and stats
+- Observability traces and stats
+- Cache admin endpoints
+- Security guard (prompt injection, SSRF, file validation)
+- JWT / password hashing unit tests
+- Rate limiter with Redis mocked
 
 ---
 
@@ -167,66 +220,62 @@ See [`.env.example`](.env.example) for the complete reference with explanations.
 nexus-ai/
 ├── backend/
 │   ├── app/
-│   │   ├── api/v1/endpoints/   # REST endpoints (auth, chat, docs, search, eval…)
-│   │   ├── agents/             # LangGraph nodes (router, planner, researcher…)
-│   │   ├── core/               # Auth, DB, cache, rate limiting, security guard
+│   │   ├── api/v1/endpoints/   # REST endpoints (15 modules)
+│   │   ├── agents/             # LangGraph nodes (router, planner, researcher, synthesizer)
+│   │   ├── core/               # Auth, DB, cache, rate limiting, security guard, config
 │   │   ├── middleware/         # Request ID tracing
-│   │   ├── models/             # SQLAlchemy ORM (User, Document, Conversation, Trace…)
+│   │   ├── models/             # SQLAlchemy ORM (User, Document, Conversation, Trace, Feedback, SystemPrompt)
 │   │   ├── rag/                # Pipeline, embeddings, retrieval, generation
-│   │   └── services/           # Business logic (RAGService, TraceService…)
-│   ├── eval/                   # RAGAS + custom metrics evaluation runner
-│   └── tests/                  # pytest test suite (security, auth, CRUD)
+│   │   └── services/           # Business logic (RAGService, TraceService, QueryProcessor)
+│   ├── eval/                   # RAGAS evaluation runner
+│   ├── tests/                  # pytest suite — 10 test modules, 80+ tests
+│   ├── railway.toml            # Railway deployment config
+│   └── .env.production.example # Production env vars reference
 ├── frontend/src/app/(app)/
-│   ├── chat/                   # Streaming chat with SSE
-│   ├── dashboard/              # Document management + [documentId] KB explorer
-│   └── observability/          # LLM usage dashboard
+│   ├── chat/                   # Streaming chat + agent mode
+│   ├── dashboard/              # Document management + KB explorer
+│   ├── observability/          # LLM metrics + cache stats dashboard
+│   └── system-prompts/         # Persona management
 ├── learning/
-│   ├── concepts/               # 24 deep-dive concept guides (basics → production)
-│   ├── daily/                  # Build logs for Days 1–17
-│   ├── interview-prep/         # 230+ interview Q&As
+│   ├── concepts/               # 31 deep-dive concept guides (embeddings → CI/CD → caching)
+│   ├── daily/                  # Build logs for Days 1–23
+│   ├── interview-prep/         # 291+ interview Q&As
 │   └── resume/                 # ATS-ready resume bullets by day
 ├── docker-compose.yml
-└── .github/workflows/ci.yml
+├── .github/workflows/ci.yml    # CI + CD pipeline
+└── Makefile                    # make dev, make test, make lint
+```
+
+---
+
+## Deploy to Railway
+
+Railway is a PaaS that runs Docker containers with managed PostgreSQL and Redis.
+
+```bash
+# 1. Install CLI and login
+npm install -g @railway/cli && railway login
+
+# 2. Create project and add plugins
+cd backend && railway init
+railway add --plugin postgresql
+railway add --plugin redis
+
+# 3. Set env vars (see backend/.env.production.example)
+# 4. Deploy
+railway up --service nexus-backend
+
+# 5. Add RAILWAY_TOKEN to GitHub Secrets for automatic CD
+#    Every push to main that passes CI auto-deploys both services
 ```
 
 ---
 
 ## Learning Journal
 
-The [`/learning`](./learning) directory is a complete study guide — written to replace external sources. Each concept guide covers basics through production patterns with code examples and interview Q&A.
+The [`/learning`](./learning) directory is a complete study guide built alongside the project. Each concept guide goes from basics to production patterns with code examples, real-world analogies, and interview Q&A.
 
-**Concepts:** Embeddings · HNSW · RAG pipeline · Hybrid search · Reranking · HyDE · Multi-query · LangGraph · Structured outputs · JWT · Redis caching · Celery · Rate limiting · Security · RAGAS · CI/CD · Docker · React SSE · Observability · Vector databases
-
----
-
-## Deploy to Railway
-
-Railway is a PaaS (like Heroku) that runs Docker containers with automatic PostgreSQL and Redis provisioning.
-
-**One-time setup:**
-
-```bash
-# 1. Install Railway CLI
-npm install -g @railway/cli
-
-# 2. Login and create project
-railway login
-cd backend && railway init     # creates a new Railway project
-
-# 3. Add managed services (Railway provisions these automatically)
-railway add --plugin postgresql
-railway add --plugin redis
-
-# 4. Set required environment variables in Railway dashboard
-#    See backend/.env.production.example for the full list
-
-# 5. Deploy manually (GitHub Actions CD handles future pushes)
-railway up --service nexus-backend
-```
-
-**Automatic deploys via GitHub Actions:**
-Add `RAILWAY_TOKEN` (from railway.app/account/tokens) as a GitHub repository secret.
-Every push to `main` that passes CI will automatically deploy both services.
+**31 concept guides:** Embeddings · HNSW · RAG pipeline · Hybrid search · Reranking · HyDE · Multi-query · LangGraph · Structured outputs · JWT · Redis caching · Celery · Rate limiting · Security · RAGAS · CI/CD · Docker · React SSE · Observability · Vector databases · Chunking strategies · RLHF / DPO · Prompt engineering · Cloud deployment · Caching & performance
 
 ---
 
