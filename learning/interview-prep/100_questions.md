@@ -597,3 +597,49 @@ A: GitHub branch protection rules restrict what can be pushed to a branch. The m
 
 ### 5 minutes (system design walk-through)
 *Use this format in interviews — draw the architecture diagram and walk through each component, explaining the WHY behind each decision. Refer to the architecture section of the README.*
+
+---
+
+## SECTION 14: RAG EVALUATION (Q179–Q192)
+
+**Q179. Why can't you evaluate a RAG system with traditional ML metrics like accuracy or F1?**
+A: Traditional metrics assume a classification problem with a fixed set of correct labels. RAG generates free-text answers — there's no single "correct" string to compare against. A correct answer to "What is RAG?" could be phrased a hundred different ways. Accuracy would give 0% even for perfect answers unless they match exactly. You need metrics that measure semantic correctness (faithfulness to context) and topical relevance, not string matching.
+
+**Q180. What is RAGAS and what problem does it solve?**
+A: RAGAS (Retrieval-Augmented Generation Assessment) is an evaluation framework for RAG systems. The problem: manually reviewing 100+ Q&A pairs to judge quality is slow and inconsistent. RAGAS automates quality scoring using an LLM as judge — it reads the question, answer, context, and reference answer, then produces 0–1 scores for faithfulness, answer relevancy, and context recall. What took a human reviewer 2 hours takes RAGAS 5 minutes.
+
+**Q181. Explain faithfulness as a metric. What exactly does it measure?**
+A: Faithfulness measures whether every factual claim in the generated answer is supported by the retrieved context. RAGAS decomposes the answer into atomic claims ("RAG stands for Retrieval-Augmented Generation", "RAG uses a vector database"), then for each claim, asks the judge LLM: is this directly stated or implied by the context? Score = supported_claims / total_claims. A faithfulness score of 0.4 means 60% of the answer's claims cannot be traced back to the context — those are hallucinations.
+
+**Q182. What is the difference between answer relevancy and faithfulness?**
+A: They measure different failure modes. Faithfulness: is the answer grounded in the context? Answer relevancy: does the answer actually address the question? An answer can score high on faithfulness (every claim is in the context) but low on relevancy (the answer talks about something adjacent to what was asked). Example: question is "What is chunking?" but the answer explains "What is embeddings?" — fully grounded in the retrieved context, but not answering the question.
+
+**Q183. What is context recall and why does it require a ground truth reference?**
+A: Context recall measures whether the retrieved context contains enough information to produce the correct answer. To know what "enough information" looks like, you need to know what the correct answer is — that's the ground truth. RAGAS compares the statements in the ground truth against the retrieved context and asks: could you derive each statement from this context? Score = derivable_statements / total_statements. Without ground truth, you can't define what information should have been retrieved.
+
+**Q184. What is "LLM-as-judge" and what are its limitations?**
+A: LLM-as-judge uses a powerful LLM to evaluate the output of another LLM. It works because modern LLMs can read a question, answer, and context and give a nuanced judgment — closer to human evaluation than any rule-based metric. Limitations: (1) self-serving bias — an LLM may rate outputs from the same model family higher; (2) inconsistency — same inputs can produce different scores across runs; (3) cost — each evaluation requires LLM API calls; (4) judge model quality caps evaluation quality — a weak judge gives unreliable scores.
+
+**Q185. What custom metrics did you build, and why are they useful alongside RAGAS?**
+A: Three custom metrics: (1) Keyword coverage — what fraction of expected_topics appear in the answer. Catches obvious off-topic answers instantly. (2) Answer length score — penalizes too-short (likely "I don't know") and too-long (padding) answers. (3) Refusal detection — detects "I cannot find", "I don't know" responses to measure knowledge base coverage gaps. They're useful because they run in milliseconds with zero API cost, enabling rapid iteration during development. RAGAS is run weekly; custom metrics are run on every change.
+
+**Q186. What is a golden dataset and how do you build one?**
+A: A golden dataset is a curated set of (question, ground_truth) pairs that serve as your eval benchmark. Build it: (1) pick 10-20 real documents from your knowledge base; (2) write 3-5 questions per document that users would actually ask; (3) write ground truths by reading the source document yourself — never use your RAG system to generate them (circular validation); (4) include edge cases: unanswerable questions, ambiguous questions, multi-hop questions. Size: 5-20 for development, 50-100 for staging, 200+ for production.
+
+**Q187. What is the danger of using your RAG system to generate the ground truth answers for your eval dataset?**
+A: Circular validation — the system grades its own homework. If your RAG system generates the ground truths, it will produce answers consistent with its retrieval and generation biases. When you then evaluate using those ground truths, high scores reflect self-consistency, not correctness. The whole point of evaluation is to measure performance against an independent human-written benchmark. The ground truth must be written before running the system, based on the source documents only.
+
+**Q188. How would you integrate evaluation into a CI/CD pipeline?**
+A: Add a GitHub Actions workflow that runs on a schedule (nightly) or on significant code changes. The workflow: (1) runs `python -m eval.runner --skip-ragas` for fast custom metrics; (2) runs a quality gate script that exits with code 1 if any metric drops below a threshold (e.g., keyword_coverage < 0.70); (3) fails the build if quality degrades. This makes quality regressions visible before merging. RAGAS runs are too expensive for every commit — run them weekly or before releases.
+
+**Q189. What does a composite score tell you that individual metrics don't?**
+A: Individual metrics each measure one dimension: coverage, length, latency. A composite score combines them into a single number that summarizes overall quality — useful for quick pass/fail assessment and trend tracking. The weighting encodes priorities: `0.5 * coverage + 0.3 * length + 0.2 * latency` says "correctness matters most, then answer quality, then speed." The composite won't tell you *why* a score is low — you still need to look at components for diagnosis. Think of it as a dashboard summary metric, not a diagnostic tool.
+
+**Q190. What does low context recall specifically tell you about your RAG pipeline?**
+A: Low context recall means the retrieved chunks don't contain the information needed to answer the question. Root causes: (1) knowledge base gap — the document covering this topic was never indexed; (2) bad chunking — the answer spans a chunk boundary and neither half has enough context; (3) retrieval failure — the embedding of the question and the embedding of the relevant chunk are too far apart in vector space (try better embeddings or hybrid search); (4) wrong top_k — the relevant chunk exists but ranked 8th and you only retrieve top 5.
+
+**Q191. How is the eval/runner.py structured and why is RAGAS run after all custom metrics?**
+A: The runner processes cases in two phases. Phase 1: loop over all EvalCases — for each, call `pipeline._retrieve()` and `generator.generate()`, measure latency, compute custom metrics instantly. Phase 2: collect all results and pass them to `run_ragas()` in a batch. RAGAS is batched because it makes multiple LLM API calls per sample — RAGAS handles rate limiting and retries internally when given a full dataset. Running RAGAS case-by-case would hit rate limits faster and lose the framework's internal optimization.
+
+**Q192. What is path traversal and how does the eval API endpoint guard against it?**
+A: Path traversal is an attack where a user supplies a filename like `../../app/core/config.py` to trick the server into reading files outside the intended directory. The eval endpoint guards against it by: (1) checking the filename matches a safe pattern (`eval_*.json`); (2) calling `path.resolve().relative_to(RESULTS_DIR.resolve())` — if the resolved path isn't inside RESULTS_DIR, `relative_to()` raises ValueError, which we catch and return HTTP 400. Never trust user-supplied filenames without validation.

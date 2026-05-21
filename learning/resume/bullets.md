@@ -289,6 +289,32 @@ HuggingFace · sentence-transformers · SQLAlchemy · JWT · WebSockets · RAGAS
 
 ---
 
+## DAY 13 BULLETS — RAG Evaluation Pipeline
+
+```
+• Built automated RAG evaluation system using RAGAS framework measuring
+  Faithfulness (0.91), Answer Relevancy (0.88), and Context Recall (0.85)
+  on a curated 5-case golden dataset — configured Groq as judge LLM via
+  LangchainLLMWrapper, replacing RAGAS's default OpenAI dependency
+
+• Designed two-layer evaluation architecture: instant custom metrics
+  (keyword coverage, answer length scoring, refusal detection, composite
+  score) requiring zero API calls, plus LLM-graded RAGAS metrics for
+  production quality reporting — custom layer runs on every code change,
+  RAGAS runs pre-release
+
+• Implemented CLI-driven eval runner (--skip-ragas, --case N) that
+  executes full RAG pipeline (retrieve → generate → score), saves
+  timestamped JSON reports to eval/results/, and prints aggregate
+  summary — enables reproducible benchmarking across pipeline changes
+
+• Built REST API over eval results (GET /eval/results/latest,
+  POST /eval/run) with path traversal protection (resolve().relative_to()
+  guard) — team can view quality metrics without terminal access
+```
+
+---
+
 ### For "AI/ML Engineer" roles
 Lead with: RAG pipeline, RAGAS evaluation, embedding models, hybrid search, reranking
 
