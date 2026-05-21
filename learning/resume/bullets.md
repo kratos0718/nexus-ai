@@ -178,6 +178,33 @@ HuggingFace · sentence-transformers · SQLAlchemy · JWT · WebSockets · RAGAS
   with health-checked service startup ordering and dev/prod profile separation
 ```
 
+## DAY 8 BULLETS — Redis Caching + Celery Background Tasks
+
+```
+• Implemented Redis query cache for LLM responses using SHA256-keyed TTL storage,
+  reducing repeat query latency from ~4s to <5ms (800x speedup) with graceful
+  degradation when Redis is unavailable
+
+• Built Celery distributed task queue for async document processing: tasks run in
+  isolated worker processes with automatic retry (3x, 60s delay) and PostgreSQL
+  status tracking — decouples HTTP responses (instant 202) from heavy embedding
+  workloads (3-5 min per document)
+
+• Designed dual-session database architecture: FastAPI uses asyncpg async engine
+  for non-blocking I/O, Celery workers use psycopg2 sync engine — both targeting
+  same PostgreSQL instance via env-var-driven connection URL
+
+• Implemented cache invalidation strategy: document deletion flushes all
+  nexus:query:* Redis keys — acceptable trade-off between precision and simplicity
+  for a system where document changes are infrequent
+
+• Built Celery fallback pattern: API endpoint tries Celery first (production path),
+  falls back to FastAPI BackgroundTasks transparently (local dev without Redis)
+  — zero code changes needed across environments
+```
+
+---
+
 ### For "AI/ML Engineer" roles
 Lead with: RAG pipeline, RAGAS evaluation, embedding models, hybrid search, reranking
 

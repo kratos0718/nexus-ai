@@ -378,6 +378,55 @@ A: `ENTRYPOINT` defines the fixed executable that always runs when the container
 
 ---
 
+## SECTION 9: REDIS CACHING & CELERY (Q116–Q130)
+
+**Q116. Why cache LLM responses instead of just caching at the database level?**
+A: LLM response generation is the most expensive step: it involves embedding the query (~10ms), vector search (~100ms), and LLM inference (~2-8 seconds with network latency). Database query caching only saves DB round trips (~5ms). Caching the full LLM response eliminates all of these steps for repeat questions, giving 1000x speedup (milliseconds vs seconds). It's appropriate because the same question about a static document always produces the same answer.
+
+**Q117. How do you design a cache key for a RAG query?**
+A: The key must uniquely identify inputs that affect the output. For RAG: (1) the question, (2) any document filter. We normalize the question (lowercase, strip whitespace) so "What is AI?" and "what is ai?" hit the same cache. We JSON-serialize the filter with sorted keys to ensure consistent ordering. Then SHA256-hash the combined string to get a fixed-length key regardless of question length. Prefix with `nexus:query:` to namespace all query caches.
+
+**Q118. When should you NOT cache a response?**
+A: Don't cache when the response depends on context that changes: (1) conversational queries with history — the same question means something different mid-conversation, (2) user-specific data — different users might have different document access, (3) time-sensitive queries like "what's the status today?", (4) when the document was just updated and cache hasn't invalidated yet. Nexus skips cache for any query that includes conversation history.
+
+**Q119. What is cache stampede and how do you prevent it?**
+A: Cache stampede (thundering herd) happens when a cached key expires and many concurrent requests all miss at the same time, all triggering full expensive computations simultaneously. Prevention strategies: (1) probabilistic early recomputation — with some probability, refresh the cache before TTL expires; (2) mutex/lock — first request recomputes, others wait on a Redis lock; (3) background refresh — a scheduler pre-warms the cache before expiry; (4) staggered TTLs — add random jitter to TTL so all keys don't expire simultaneously.
+
+**Q120. How does Redis TTL work and how do you choose the right value?**
+A: `SETEX key seconds value` stores a key that auto-deletes after `seconds`. Redis checks TTL passively (on access) and actively (random sampling). Choose TTL based on how fast the source data changes: query answers from static documents → 1 hour; session tokens → 24 hours; rate limit windows → 60 seconds. Too short = cache misses defeat the purpose. Too long = stale data. For documents that users edit frequently, prefer shorter TTLs or event-driven invalidation.
+
+**Q121. What is the difference between cache-aside and write-through caching?**
+A: Cache-aside (lazy loading): on read, check cache first; on miss, load from source and populate cache. On write, just update the source — cache becomes stale until TTL expires or explicit invalidation. Write-through: on write, update both source AND cache atomically. Cache-aside is simpler and saves memory (only cache what's actually read). Write-through keeps cache always fresh but wastes memory on writes that are never read. Nexus uses cache-aside: query → miss → pipeline → store in cache.
+
+**Q122. Why does Nexus flush ALL query caches when a single document is deleted?**
+A: Cache keys are SHA256 hashes of (question + filter). We can't reverse a hash to find which questions were answered using a specific document's chunks. The only option is to scan all `nexus:query:*` keys and delete them all. This is an acceptable trade-off because: (1) document deletion is rare, (2) the cache rebuilds itself on the next request, (3) the alternative (per-document key tracking) adds significant complexity.
+
+**Q123. What is Celery and how is it different from FastAPI BackgroundTasks?**
+A: Celery is a distributed task queue — tasks run in completely separate worker processes, can be on separate machines, survive API server crashes, support retries, and can be monitored. FastAPI BackgroundTasks runs in the same process as the API server after the response is sent — no retries, no monitoring, if the API process dies the task dies with it. For short tasks (< 30s, non-critical), BackgroundTasks is fine. For long tasks (PDF embedding), Celery is the right choice.
+
+**Q124. What is the role of the broker vs backend in Celery?**
+A: Broker (Redis/RabbitMQ): a message queue that stores task messages ("please run index_document with these args"). Workers read from the broker to know what to do. Backend (Redis/database): a result store that holds task outcomes ("task abc123 succeeded with result {chunks: 42}"). The backend is optional — if you don't need to retrieve results programmatically (Nexus writes status directly to PostgreSQL instead), you can skip it. Broker is always required.
+
+**Q125. Explain `task_acks_late=True` and when you'd want it.**
+A: By default, Celery acknowledges (deletes from queue) a task as soon as a worker picks it up — even before running it. If the worker crashes mid-execution, the task is lost. `task_acks_late=True` delays acknowledgement until after the task completes. If the worker crashes, the task goes back to the queue for another worker. Risk: if the worker crashes after completing but before ack, the task runs twice (at-least-once delivery). Use `acks_late` when task loss is worse than duplicate execution, and when tasks are idempotent (safe to run twice — re-indexing overwrites existing chunks, so it's fine).
+
+**Q126. How do you pass data to a Celery task? What can and can't you pass?**
+A: Celery serializes task arguments to JSON (by default). This means you can only pass JSON-serializable types: strings, numbers, lists, dicts, None. You CANNOT pass Python objects (database sessions, ORM models, file handles, embeddings). This is why Nexus passes `document_id` and `file_path` strings to the task — the task looks up the database record itself. Never pass large data (like file contents) as task arguments; use a file path or object store reference instead.
+
+**Q127. What does `bind=True` do on a Celery task?**
+A: Without `bind=True`, the task function receives only its arguments. With `bind=True`, the first argument is `self` — the task instance. `self` gives access to: `self.retry()` to requeue the task, `self.request.id` to get the current task UUID, `self.request.retries` to know which retry attempt this is, and `self.update_state()` to publish custom progress updates. You almost always want `bind=True` for tasks that need retry logic.
+
+**Q128. How does Celery retry work? What happens after max_retries?**
+A: `raise self.retry(exc=exc)` puts the task back in the queue after `default_retry_delay` seconds (or the `countdown` argument). On each retry, `self.request.retries` increments. When retries reach `max_retries`, Celery raises `MaxRetriesExceededError` instead of retrying — the task enters FAILURE state permanently. You can also implement exponential backoff: `raise self.retry(exc=exc, countdown=2 ** self.request.retries * 60)`.
+
+**Q129. How do FastAPI (async) and Celery (sync) share the same PostgreSQL database?**
+A: They use separate SQLAlchemy engines but the same connection string. FastAPI uses `create_async_engine` with the `asyncpg` driver (non-blocking for the event loop). Celery uses `create_engine` with the standard `psycopg2` driver (blocking, but fine in a thread-based worker). Both read from the same `DATABASE_URL` env var; Nexus strips the `+asyncpg` from the URL for the sync engine. PostgreSQL handles concurrent connections from both engines via connection pooling.
+
+**Q130. What is the `worker_prefetch_multiplier` setting and why is it set to 1?**
+A: Celery workers prefetch multiple tasks from the queue to reduce round-trip overhead. With the default `prefetch_multiplier=4`, a worker grabs 4 tasks from the queue even if it's only running 1. For short tasks, this is efficient. For long tasks like PDF indexing (3–5 minutes each), a worker hoarding 4 tasks means 3 tasks sit idle waiting while other workers are free. Setting `prefetch_multiplier=1` ensures each worker holds only what it's actively running — better load distribution across workers, at the cost of slightly more broker traffic.
+
+---
+
 ## "TELL ME ABOUT YOUR PROJECT" — 3 VERSIONS
 
 ### 30 seconds (elevator pitch)

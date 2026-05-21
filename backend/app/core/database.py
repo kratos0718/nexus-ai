@@ -1,29 +1,50 @@
 """
 Database engine, session factory, and base model for SQLAlchemy.
-Uses SQLite for dev (no Docker), PostgreSQL for production (swap DATABASE_URL).
+
+Async engine  → FastAPI (all HTTP request handlers)
+Sync engine   → Celery tasks (background workers — can't use asyncio)
 """
 
+import os
+import re
+
 from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, DeclarativeBase
+from sqlalchemy.orm import sessionmaker, Session, DeclarativeBase
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 
-# SQLite for dev — file-based, zero config, no Docker needed
-# Switch to postgres+asyncpg://... in production .env
-SQLITE_URL = "sqlite+aiosqlite:///./nexus.db"
 
-# Async engine — required for FastAPI (async/await everywhere)
-async_engine = create_async_engine(
-    SQLITE_URL,
-    echo=False,         # set True to log every SQL query (debug)
-    connect_args={"check_same_thread": False},  # SQLite-only: allow multi-thread
-)
+def _get_database_url() -> str:
+    return os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./nexus.db")
 
-# Session factory — create one session per request, close after
+
+def _to_sync_url(url: str) -> str:
+    """Strip async drivers — required for sync SQLAlchemy (Alembic, Celery)."""
+    url = re.sub(r"sqlite\+aiosqlite", "sqlite", url)
+    url = re.sub(r"postgresql\+asyncpg", "postgresql", url)
+    return url
+
+
+# ── Async engine (FastAPI) ────────────────────────────────────────────────────
+
+_async_url = _get_database_url()
+_connect_args = {"check_same_thread": False} if "sqlite" in _async_url else {}
+
+async_engine = create_async_engine(_async_url, echo=False, connect_args=_connect_args)
+
 AsyncSessionLocal = async_sessionmaker(
     bind=async_engine,
     class_=AsyncSession,
-    expire_on_commit=False,   # keep objects usable after commit
+    expire_on_commit=False,
 )
+
+
+# ── Sync engine (Celery workers) ──────────────────────────────────────────────
+
+_sync_url = _to_sync_url(_get_database_url())
+_sync_connect_args = {"check_same_thread": False} if "sqlite" in _sync_url else {}
+
+sync_engine = create_engine(_sync_url, connect_args=_sync_connect_args)
+SyncSessionLocal = sessionmaker(bind=sync_engine, expire_on_commit=False)
 
 
 class Base(DeclarativeBase):
@@ -32,20 +53,13 @@ class Base(DeclarativeBase):
 
 
 async def create_tables():
-    """Create all tables defined in models. Called once at app startup."""
+    """Create all tables. Called once at app startup."""
     async with async_engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
 
 async def get_db():
-    """
-    FastAPI dependency — yields one DB session per HTTP request.
-    Session is automatically closed when the request finishes.
-
-    Usage in endpoint:
-        async def my_endpoint(db: AsyncSession = Depends(get_db)):
-            ...
-    """
+    """FastAPI dependency — one async session per request."""
     async with AsyncSessionLocal() as session:
         try:
             yield session
@@ -53,3 +67,8 @@ async def get_db():
         except Exception:
             await session.rollback()
             raise
+
+
+def get_sync_db() -> Session:
+    """Celery dependency — one sync session per task. Caller must close."""
+    return SyncSessionLocal()
