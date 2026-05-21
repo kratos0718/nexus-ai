@@ -106,7 +106,7 @@ jobs:
         run: npx tsc --noEmit
 
   # ── Summary gate ─────────────────────────────────────────────────────────────
-  # All three jobs must pass for the CI to be green.
+  # All three jobs must pass for the CI badge to be green.
   # Add this job as the required check in branch protection rules.
   ci-passed:
     name: CI passed
@@ -114,39 +114,3 @@ jobs:
     needs: [lint, backend-tests, frontend-checks]
     steps:
       - run: echo "All checks passed"
-
-  # ── Deploy ───────────────────────────────────────────────────────────────────
-  # Runs ONLY on push to main (not on PRs) after all CI jobs pass.
-  # Requires RAILWAY_TOKEN secret set in repo Settings → Secrets → Actions.
-  #
-  # Setup steps (one-time):
-  #   1. Create project at railway.app
-  #   2. railway login → railway link (inside backend/)
-  #   3. Add Postgres + Redis plugins in Railway dashboard
-  #   4. Set env vars from backend/.env.production.example
-  #   5. Copy token from railway.app/account/tokens → GitHub secret RAILWAY_TOKEN
-  deploy:
-    name: Deploy to Railway
-    runs-on: ubuntu-latest
-    needs: [lint, backend-tests, frontend-checks]
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install Railway CLI
-        run: npm install -g @railway/cli
-
-      - name: Deploy backend
-        working-directory: backend
-        run: railway up --service nexus-backend --detach
-        env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-        continue-on-error: true  # remove once RAILWAY_TOKEN secret is configured
-
-      - name: Deploy frontend
-        working-directory: frontend
-        run: railway up --service nexus-frontend --detach
-        env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-        continue-on-error: true  # remove once RAILWAY_TOKEN secret is configured

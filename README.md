@@ -89,9 +89,9 @@
 - Observability dashboard — latency bars (P95), token stats, cache panel, trace table
 
 ### DevOps
-- Docker Compose — one command local stack (FastAPI + PostgreSQL + Redis + ChromaDB)
-- GitHub Actions CI/CD — lint → tests (coverage gate) → TypeScript → auto-deploy to Railway
-- Railway deployment — `backend/railway.toml` + `frontend/railway.toml` configs included
+- Docker Compose — one command full stack (FastAPI + PostgreSQL + Redis + ChromaDB)
+- GitHub Actions CI — lint (ruff) → backend tests with coverage gate → TypeScript check
+- Frontend deploys to Vercel (free, no card) — auto-deploy on push to main via GitHub integration
 - Liveness (`/ping`) + readiness (`/health`) probes — DB, Redis, pipeline, vector store
 
 ---
@@ -248,26 +248,37 @@ nexus-ai/
 
 ---
 
-## Deploy to Railway
+## Deployment
 
-Railway is a PaaS that runs Docker containers with managed PostgreSQL and Redis.
+### Frontend → Vercel (free, no card required)
+
+1. Push this repo to GitHub
+2. Go to [vercel.com](https://vercel.com) → New Project → Import repo
+3. Set **Root Directory** to `frontend`
+4. Add environment variable: `NEXT_PUBLIC_API_URL=https://your-backend-url`
+5. Deploy — Vercel detects Next.js automatically
+
+### Backend → any Linux server via Docker Compose
 
 ```bash
-# 1. Install CLI and login
-npm install -g @railway/cli && railway login
+# On your server (VPS, home lab, or any Linux machine)
+git clone https://github.com/your-username/nexus-ai.git
+cd nexus-ai
 
-# 2. Create project and add plugins
-cd backend && railway init
-railway add --plugin postgresql
-railway add --plugin redis
+# Fill in your env vars
+cp backend/.env.production.example backend/.env
+# Edit backend/.env — set GROQ_API_KEY, SECRET_KEY, JWT_SECRET_KEY, ALLOWED_ORIGINS
 
-# 3. Set env vars (see backend/.env.production.example)
-# 4. Deploy
-railway up --service nexus-backend
+# Start the full stack (FastAPI + PostgreSQL + Redis + ChromaDB)
+docker compose up -d
 
-# 5. Add RAILWAY_TOKEN to GitHub Secrets for automatic CD
-#    Every push to main that passes CI auto-deploys both services
+# Run database migrations
+docker compose exec backend alembic upgrade head
 ```
+
+The app is then reachable at `http://your-server-ip:8000`.
+
+> **Free hosting options (no card required):** Render free tier supports Docker deploys. Set `DATABASE_URL` and `REDIS_URL` from Render's managed add-ons. See [`backend/.env.production.example`](backend/.env.production.example) for all required variables.
 
 ---
 
@@ -285,5 +296,5 @@ The [`/learning`](./learning) directory is a complete study guide built alongsid
 Backend    Python · FastAPI · LangChain · LangGraph · SQLAlchemy · Alembic · Celery
 AI/ML      Groq (Llama 3.3-70B) · sentence-transformers · ChromaDB · Pinecone · RAGAS
 Frontend   Next.js 15 · TypeScript · Tailwind CSS
-Infra      PostgreSQL · Redis · Docker · GitHub Actions · Railway
+Infra      PostgreSQL · Redis · Docker · GitHub Actions · Vercel
 ```
