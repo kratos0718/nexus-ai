@@ -341,6 +341,26 @@ HuggingFace · sentence-transformers · SQLAlchemy · JWT · WebSockets · RAGAS
 
 ---
 
+## DAY 15 BULLETS — Observability Dashboard + Retrieval Mode UI
+
+```
+• Built observability dashboard (Next.js) consuming /traces/stats and
+  /traces/ endpoints with parallel Promise.all fetching, CSS-based latency
+  bar charts, and per-mode color-coded trace table — auto-refreshes every
+  30s via setInterval with useEffect cleanup to prevent memory leaks
+
+• Added retrieval mode selector (standard / HyDE / multi-query) to chat
+  toolbar — appears only in direct RAG mode (hidden when agent mode is on);
+  selection is passed as retrieval_mode field to /chat/stream, with the
+  active mode logged as trace_type for A/B comparison via the dashboard
+
+• Used TypeScript union types (Literal["standard", "hyde", "multiquery"])
+  for retrieval mode state, preventing invalid values at compile time rather
+  than relying on runtime checks
+```
+
+---
+
 ### For "AI/ML Engineer" roles
 Lead with: RAG pipeline, RAGAS evaluation, embedding models, hybrid search, reranking
 

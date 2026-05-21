@@ -144,6 +144,7 @@ export default function ChatPage() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeConvId, setActiveConvId] = useState<string | null>(null);
   const [agentMode, setAgentMode] = useState(true);
+  const [retrievalMode, setRetrievalMode] = useState<"standard" | "hyde" | "multiquery">("standard");
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -209,6 +210,7 @@ export default function ChatPage() {
           question,
           document_id: selectedDoc || null,
           conversation_id: convId,
+          retrieval_mode: agentMode ? "standard" : retrievalMode,
         }),
       });
 
@@ -347,10 +349,18 @@ export default function ChatPage() {
             ⚡ {agentMode ? "Agent mode ON" : "Agent mode OFF"}
           </button>
 
-          {agentMode && (
-            <span className="text-xs" style={{ color: "var(--text-muted)" }}>
-              Routes simple vs complex queries automatically
-            </span>
+          {!agentMode && (
+            <select
+              value={retrievalMode}
+              onChange={(e) => setRetrievalMode(e.target.value as typeof retrievalMode)}
+              className="text-xs px-2 py-1.5 rounded-lg border outline-none"
+              style={{ background: "var(--surface-2)", borderColor: "var(--border)", color: "var(--text)" }}
+              title="Retrieval strategy"
+            >
+              <option value="standard">Standard retrieval</option>
+              <option value="hyde">HyDE — hypothetical doc</option>
+              <option value="multiquery">Multi-query expansion</option>
+            </select>
           )}
         </div>
 

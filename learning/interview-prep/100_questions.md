@@ -686,3 +686,46 @@ A: Add `retrieval_mode` as a schema field with a default of `"standard"`. Existi
 
 **Q205. How would you measure whether HyDE or multi-query actually improves your RAG system?**
 A: Run your eval dataset (`eval/runner.py`) three times — once per mode — and compare RAGAS metrics. Specifically: Context Recall (did retrieval find the right chunks?) and Faithfulness (is the answer grounded in the retrieved context?). You'd expect HyDE and multi-query to improve Context Recall on the cases they help. Also measure latency increase (the extra LLM call). If Context Recall improves by 8% and latency increases by 400ms, that's a concrete trade-off to present to stakeholders. Without measurement, "advanced retrieval improves quality" is just a belief.
+
+---
+
+## SECTION 16: FRONTEND REACT PATTERNS (Q206–Q218)
+
+**Q206. Why use `fetch` with `ReadableStream` for SSE instead of Axios?**
+A: Axios is a promise-based HTTP client — it buffers the entire response before resolving. For SSE, you need to process data as it arrives, not after the stream ends. `fetch` returns a `Response` object with a `.body` property that is a `ReadableStream` you can read chunk by chunk. The pattern is: `reader = res.body.getReader()`, then loop `await reader.read()` in a while loop. Each `value` is a `Uint8Array` you decode with `TextDecoder`. Axios can't do this without special adapters; native `fetch` handles it natively.
+
+**Q207. What does `{ stream: true }` do in `new TextDecoder()` and why is it needed for SSE?**
+A: TCP/IP is a streaming protocol — it can split data anywhere, including in the middle of a multi-byte UTF-8 character. Without `{ stream: true }`, `decoder.decode(value)` treats each chunk as complete: if a chunk ends mid-character, the incomplete bytes become the replacement character `?`. With `{ stream: true }`, the decoder keeps a buffer of incomplete sequences and combines them with the next chunk. For SSE this matters: a token like "→" (3 UTF-8 bytes) might arrive split across two TCP segments.
+
+**Q208. Why must you clear `setInterval` in the `useEffect` cleanup function?**
+A: When a React component unmounts, its state no longer exists. If an interval fires after unmounting and calls `setState`, React throws a warning ("Can't perform a React state update on an unmounted component") and the callback holds a stale closure over the component's previous state. The interval also keeps a reference to the component's closure, preventing garbage collection — a memory leak. The cleanup function (`return () => clearInterval(id)`) runs when the component unmounts, stopping the timer and releasing the reference.
+
+**Q209. What is `Promise.all` and when is it better than sequential awaits?**
+A: `Promise.all` takes an array of promises and resolves when ALL of them resolve, or rejects when any one rejects. It runs them concurrently, not sequentially. Use it when requests are independent (don't need each other's results). Sequential: `await a(); await b()` — total time = time(a) + time(b). Parallel: `await Promise.all([a(), b()])` — total time = max(time(a), time(b)). For the observability page: stats and traces are independent, so parallel cuts wait time in half. Use sequential when request B needs a value from response A.
+
+**Q210. What is an optimistic UI update and what are its risks?**
+A: An optimistic update applies the expected result of an action to the UI immediately, before the server confirms. Example: delete a document → remove it from the list instantly, then call the API. Risk: if the API call fails (server error, network timeout), the UI shows the deleted item as gone but it still exists on the server. Mitigation: in the error handler, re-fetch the true state from the server to reconcile. Optimistic updates are appropriate for high-confidence operations (deletes usually succeed). Avoid for operations with business-rule validation or side effects you can't roll back.
+
+**Q211. How does the Axios JWT refresh interceptor prevent infinite retry loops?**
+A: The interceptor sets `original._retry = true` before attempting the refresh. If the refresh call also returns 401 (the refresh token itself is expired), the interceptor would normally trigger again. But it checks `!original._retry` at the top — if `_retry` is already true, it skips the retry and goes straight to the logout flow. Without this flag, a 401 on the refresh call would trigger another refresh attempt, which would 401 again, creating an infinite loop of HTTP requests.
+
+**Q212. Why does the Axios interceptor use `axios.post` (bare axios) for the refresh call, not the `api` instance?**
+A: The `api` instance has the response interceptor attached. If the refresh call returns 401, it would trigger the interceptor again, which would try to refresh again — infinite loop. The bare `axios` instance has no interceptors attached, so a 401 on the refresh call simply rejects the promise and falls through to the catch block where we clear tokens and redirect to login. This breaks the cycle.
+
+**Q213. What is the difference between SSE, WebSockets, and polling for real-time data?**
+A: Polling: client asks every N seconds ("do you have new data?") — simple but wastes requests when nothing changed. SSE: server sends data whenever it has something, client receives on a persistent HTTP connection — one-directional (server→client only), simpler than WebSocket. WebSocket: persistent bidirectional connection — client and server can both send at any time — necessary for collaborative editing, live cursors, multiplayer. For AI token streaming, SSE is sufficient and simpler. For observability dashboards, polling is fine. WebSocket would be overkill for both.
+
+**Q214. How do you type-safely handle the retrieval_mode enum in TypeScript?**
+A: Define a union type: `type RetrievalMode = "standard" | "hyde" | "multiquery"`. Use it in `useState<RetrievalMode>("standard")`. In event handlers: `setMode(e.target.value as RetrievalMode)`. The `as` cast is safe because the `<select>` options are bounded to those three values — it's impossible for the user to select any other string. TypeScript prevents you from passing `"invalid"` anywhere a `RetrievalMode` is expected, giving you compile-time safety for what is essentially an enum.
+
+**Q215. How does the observability page auto-refresh without blocking the UI?**
+A: `useEffect` sets up a `setInterval` that calls `fetchData()` every 30 seconds. `fetchData` is an async function that uses Axios to fetch both stats and traces in parallel via `Promise.all`. While the fetch is in progress, the old data remains displayed — the UI never shows a loading state on refresh, only on initial load. When the new data arrives, `setStats` and `setTraces` trigger a re-render with updated values. The interval's cleanup function clears it on unmount.
+
+**Q216. What is component state "lifting" and when do you use it?**
+A: When two sibling components need to share the same piece of state, you move that state to their nearest common ancestor. The parent holds the state and passes it (and a setter) as props to the children. Example: in the chat page, `selectedDoc` (which document to search) affects both the document selector dropdown AND the message sending function — both need it, so it lives in `ChatPage`. If only the dropdown needed it, it would stay inside the dropdown component. Lifting state minimizes re-renders — only the components that actually need the state subscribe to it.
+
+**Q217. Why show the streaming cursor (blinking caret) while content is arriving?**
+A: The cursor gives the user immediate visual confirmation that something is happening — they know the system is generating, not frozen. Without it, the first 0.5-2 seconds of an LLM response look like a loading state with no feedback. The cursor is implemented with a conditional: if `msg.streaming`, render `{msg.content}<span className="animate-pulse">|</span>`. When streaming ends, `streaming` is set to false and the cursor disappears. This is a UX pattern borrowed from terminal applications where the cursor signals active output.
+
+**Q218. What is the `useRef` hook used for in the chat page?**
+A: `useRef` gives you a mutable container that doesn't trigger re-renders when changed — unlike `useState`. In the chat page it's used for two things: `bottomRef` (a reference to the invisible div at the end of the message list, used for `scrollIntoView` to auto-scroll to the newest message) and `inputRef` (a reference to the textarea, used for `inputRef.current?.focus()` to return focus after sending). Both are DOM operations that aren't part of the render output — they're imperative side effects on real DOM nodes, which is exactly what `useRef` is for.

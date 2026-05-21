@@ -21,6 +21,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const navItems = [
     { href: "/dashboard", label: "Documents", icon: "📄" },
     { href: "/chat", label: "Chat", icon: "💬" },
+    { href: "/observability", label: "Observability", icon: "📊" },
   ];
 
   return (
