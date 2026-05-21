@@ -2,23 +2,49 @@
 Agent node functions — each is a pure function: AgentState → partial AgentState dict.
 
 LangGraph merges the returned dict back into the full state.
+
+Router and Planner use structured outputs (with_structured_output) so the LLM
+returns a typed Pydantic model instead of free-text — no string parsing needed.
 """
 
 import os
+from typing import Literal
 from loguru import logger
 from langchain_groq import ChatGroq
+from pydantic import BaseModel, Field
 
 from app.agents.state import AgentState
 from app.rag.retrieval.vector_store import SearchResult
 
 
-# Shared LLM instance — lightweight calls (routing, planning) use a fast model
-def _get_llm() -> ChatGroq:
+def _get_llm(max_tokens: int = 512) -> ChatGroq:
     return ChatGroq(
         api_key=os.getenv("GROQ_API_KEY", ""),
         model="llama-3.3-70b-versatile",
-        temperature=0.0,    # deterministic for routing and planning
-        max_tokens=512,
+        temperature=0.0,
+        max_tokens=max_tokens,
+    )
+
+
+# ── Structured output schemas ─────────────────────────────────────────────────
+
+class RouteDecision(BaseModel):
+    """Schema for the router's classification output."""
+    route: Literal["simple", "complex"] = Field(
+        description="'simple' if the question requires direct lookup, "
+                    "'complex' if it requires comparing or synthesizing multiple sections."
+    )
+    reasoning: str = Field(
+        description="One sentence explaining the routing decision."
+    )
+
+
+class ResearchPlan(BaseModel):
+    """Schema for the planner's sub-question decomposition."""
+    sub_questions: list[str] = Field(
+        description="2 to 4 targeted sub-questions that together answer the main question.",
+        min_length=2,
+        max_length=4,
     )
 
 
@@ -26,35 +52,34 @@ def _get_llm() -> ChatGroq:
 
 ROUTER_PROMPT = """Classify whether this question requires simple RAG retrieval or complex multi-step reasoning.
 
-SIMPLE: The answer lives in one focused section of a document. Single topic. Direct lookup.
-Examples:
-- "What is the vacation policy?"
-- "Who is the CEO?"
-- "What does the contract say about termination?"
+SIMPLE: Answer lives in one focused section. Single topic. Direct lookup.
+COMPLEX: Requires comparing multiple sections, multi-hop reasoning, or synthesis across topics.
 
-COMPLEX: Requires comparing multiple sections, multi-hop reasoning, or synthesizing across different topics.
-Examples:
-- "Compare the vacation policies across all three employment contracts."
-- "What are the main differences between product A and product B, and which is better for enterprise use?"
-- "How do the Q1 results relate to the strategic goals mentioned in the annual report?"
-
-Question: {question}
-
-Respond with ONLY one word: "simple" or "complex"."""
+Question: {question}"""
 
 
 def router_node(state: AgentState) -> dict:
-    """Classifies query complexity → routes to simple RAG or complex planning path."""
+    """
+    Classifies query complexity using structured output.
+    The LLM fills a RouteDecision schema — no string parsing needed.
+    """
     logger.info(f"[Router] Classifying: '{state['question'][:60]}'")
 
     llm = _get_llm()
-    response = llm.invoke(ROUTER_PROMPT.format(question=state["question"]))
-    route = response.content.strip().lower().replace('"', "").replace("'", "")
+    # with_structured_output makes the LLM return a RouteDecision object
+    structured_llm = llm.with_structured_output(RouteDecision)
 
-    if route not in ("simple", "complex"):
+    try:
+        decision: RouteDecision = structured_llm.invoke(
+            ROUTER_PROMPT.format(question=state["question"])
+        )
+        route = decision.route
+        logger.info(f"[Router] → {route} | {decision.reasoning}")
+    except Exception as e:
+        # Fallback: if structured output fails, default to simple
+        logger.warning(f"[Router] Structured output failed, defaulting to simple: {e}")
         route = "simple"
 
-    logger.info(f"[Router] → {route}")
     return {"route": route}
 
 
@@ -62,30 +87,31 @@ def router_node(state: AgentState) -> dict:
 
 PLANNER_PROMPT = """You are a research planner. Break this complex question into 2-4 targeted sub-questions.
 
-Each sub-question should:
-- Be self-contained (answerable on its own)
-- Target a different aspect of the main question
-- Be specific enough for document retrieval
+Each sub-question should be self-contained and target a different aspect.
 
-Main question: {question}
-
-Return ONLY the sub-questions, one per line. No numbering, no explanations."""
+Main question: {question}"""
 
 
 def planner_node(state: AgentState) -> dict:
-    """Decomposes a complex question into 2–4 targeted sub-questions."""
+    """
+    Decomposes a complex question using structured output.
+    The LLM fills a ResearchPlan schema with a typed list of strings.
+    """
     logger.info(f"[Planner] Decomposing: '{state['question'][:60]}'")
 
     llm = _get_llm()
-    response = llm.invoke(PLANNER_PROMPT.format(question=state["question"]))
+    structured_llm = llm.with_structured_output(ResearchPlan)
 
-    sub_questions = [
-        q.strip().lstrip("-•* ")
-        for q in response.content.strip().split("\n")
-        if q.strip()
-    ][:4]  # cap at 4
+    try:
+        plan: ResearchPlan = structured_llm.invoke(
+            PLANNER_PROMPT.format(question=state["question"])
+        )
+        sub_questions = plan.sub_questions[:4]
+        logger.info(f"[Planner] → {len(sub_questions)} sub-questions: {sub_questions}")
+    except Exception as e:
+        logger.warning(f"[Planner] Structured output failed, using question as-is: {e}")
+        sub_questions = [state["question"]]
 
-    logger.info(f"[Planner] → {len(sub_questions)} sub-questions: {sub_questions}")
     return {"sub_questions": sub_questions}
 
 
