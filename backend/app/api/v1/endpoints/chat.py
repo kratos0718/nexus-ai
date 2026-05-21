@@ -6,6 +6,8 @@ POST /chat/stream  — streaming version via Server-Sent Events (auth required)
 GET  /chat/health  — verify LLM is reachable (public)
 """
 
+import time
+
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,6 +16,7 @@ from app.core.database import get_db
 from app.core.dependencies import rate_limit_user
 from app.models.user import User
 from app.services.rag_service import rag_service
+from app.services.trace_service import trace_service
 from app.schemas.chat import QueryRequest, QueryResponse
 
 router = APIRouter()
@@ -51,6 +54,7 @@ async def query(
             raise HTTPException(status_code=404, detail="Conversation not found")
         history = rag_service._build_history(conversation.messages)
 
+    t0 = time.monotonic()
     try:
         result = await rag_service.query(
             question=request.question,
@@ -59,6 +63,21 @@ async def query(
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Query failed: {str(e)}")
+
+    duration_ms = (time.monotonic() - t0) * 1000
+    background_tasks.add_task(
+        trace_service.record,
+        db=db,
+        question=request.question,
+        answer=result.answer,
+        model=result.model,
+        prompt_tokens=result.prompt_tokens,
+        completion_tokens=result.completion_tokens,
+        duration_ms=duration_ms,
+        trace_type="rag",
+        user_id=current_user.id,
+        document_id=request.document_id,
+    )
 
     # Persist messages to conversation if one was provided
     if conversation:

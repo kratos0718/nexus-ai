@@ -510,6 +510,40 @@ A: (1) Design arguments from information the LLM has in context (question + hist
 
 ---
 
+## SECTION 12: LLM OBSERVABILITY (Q156–Q165)
+
+**Q156. What is LLM observability and how does it differ from traditional API monitoring?**
+A: Traditional API monitoring tracks latency, error rate, and throughput — all deterministic and binary (success/failure). LLM observability adds dimensions that don't exist in regular APIs: token consumption (maps directly to cost), answer quality (a 200 OK can contain a wrong answer), hallucination rate, retrieval quality (did we find the right chunks?), context window utilization, and model-specific metrics. You also need to track conversations as a unit, not just individual requests — a session might have 10 requests, each correct, but the conversation as a whole goes in circles.
+
+**Q157. What does a trace capture in an LLM system?**
+A: One trace = one complete LLM interaction. It records: the input (question), output (answer), which model was used, how many tokens were consumed (prompt and completion separately), how long it took (duration_ms), who made the request (user_id), which data was searched (document_id), the type of call (direct RAG or multi-agent), and whether it succeeded or failed. This is enough to reconstruct what happened for any request, calculate cost, and compute aggregate trends.
+
+**Q158. Why write traces to a relational database rather than a log file?**
+A: Log files are append-only and unindexed — queries require full-file scans. A relational table with indexes on user_id and created_at lets you compute `AVG(duration_ms)`, `SUM(total_tokens)`, `GROUP BY DATE(created_at)` in milliseconds. You can also JOIN with the users table to get per-user breakdowns, or filter by document_id to see which documents generate the slowest queries. Log files require regex parsing and external tools (Elasticsearch, Splunk) to do the same — more infrastructure, more cost.
+
+**Q159. Why use `time.monotonic()` instead of `time.time()` for measuring query duration?**
+A: `time.time()` reads the wall clock, which can jump backward (NTP clock adjustment) or forward (DST change). If the clock moves during a measurement, `end - start` can be negative or artificially large. `time.monotonic()` is a system counter that only ever increases — guaranteed to produce a positive, accurate duration regardless of clock adjustments. Always use monotonic for measuring elapsed time.
+
+**Q160. Why is tracing written as a BackgroundTask rather than inline in the request handler?**
+A: Inline tracing adds latency to the user's response — if the DB write takes 20ms, every user waits 20ms extra. As a BackgroundTask, FastAPI sends the response first and runs the trace write after. If the trace write fails (DB down, network timeout), the user is completely unaffected — they already got their answer. Tracing is a side effect on the observability path, not the critical path. It should never be the reason a user sees a slow or failed response.
+
+**Q161. What is the difference between p50 (median) and p95 latency, and why does p95 matter more?**
+A: p50 = half of requests are faster, half slower. p95 = 95% of requests are faster than this. Average and p50 hide outliers. If 95% of requests take 800ms but 5% take 15,000ms (timeout), your average might be 1,500ms — looks fine. But 1 in 20 users experiences a 15-second wait. p95 tells you about the tail of the distribution — the worst-case experience. Production SLAs are almost always defined on p99 or p95, not average.
+
+**Q162. How do you calculate the cost of LLM API calls?**
+A: Every LLM API response includes a `usage` object with `prompt_tokens` and `completion_tokens`. Multiply by the model's price per million tokens. Example for Groq's llama-3.3-70b (hypothetical paid tier): `cost = (prompt_tokens / 1_000_000 * 0.59) + (completion_tokens / 1_000_000 * 0.79)`. Store both token counts in your trace table, compute cost at query time (prices change, tokens don't). Over a month, sum across all traces to get total spend. This lets you set per-user budgets and alert when a user's hourly spend exceeds a threshold.
+
+**Q163. What metrics would you alert on for an LLM application?**
+A: (1) avg_duration_ms > 8,000ms — LLM is slow or unreachable. (2) error_rate_pct > 5% — pipeline bug or context overflow. (3) hourly_tokens > 100k — cost spike or abuse. (4) "I don't know" response rate > 30% — retrieval quality degrading. (5) p95_duration_ms > 15,000ms — users experiencing timeouts. (6) context_window_utilization > 80% — approaching token limits. Set these as time-series threshold alerts in your monitoring system.
+
+**Q164. What is Langfuse and when would you use it over a custom trace table?**
+A: Langfuse is an open-source LLM observability platform with a web dashboard, automatic cost calculation for 50+ models, session tracking, human feedback collection (thumbs up/down), and automated evaluations. Use Langfuse in production when you need: a visual timeline of traces, A/B testing of prompt versions, non-technical stakeholders viewing dashboards, or automated quality evaluations. Use a custom table when: you're in early development, you want zero external dependencies, you need offline operation, or your data must stay on-premise for compliance reasons.
+
+**Q165. What is the "observability maturity model" for AI systems?**
+A: Level 0: no monitoring, find out from user complaints. Level 1: print/log statements, search with grep. Level 2: structured JSON logs + basic request counts. Level 3: traces in DB with aggregate queries — what Nexus built on Day 11. Level 4: dashboards (Grafana/Metabase) + automated alerts. Level 5: automated quality evaluation on sampled traces (RAGAS scores, GPT-as-judge). Level 6: evaluation failures trigger fine-tuning, data flywheel. Most production teams operate at Level 3-4. Levels 5-6 are rare and require dedicated ML platform teams.
+
+---
+
 ## "TELL ME ABOUT YOUR PROJECT" — 3 VERSIONS
 
 ### 30 seconds (elevator pitch)
