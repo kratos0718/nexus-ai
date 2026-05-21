@@ -226,6 +226,25 @@ HuggingFace · sentence-transformers · SQLAlchemy · JWT · WebSockets · RAGAS
 
 ---
 
+## DAY 10 BULLETS — Function Calling & Structured Outputs
+
+```
+• Replaced brittle free-text parsing in LangGraph agent nodes with Pydantic
+  structured outputs using with_structured_output() — router and planner now
+  return type-safe objects (RouteDecision, ResearchPlan) with Literal constraints
+  and Pydantic field validation, eliminating silent routing failures
+
+• Designed RouteDecision schema with Literal["simple","complex"] type and a
+  reasoning field — forces deterministic routing AND captures LLM's explanation
+  for free, enabling production debugging without extra instrumentation
+
+• Applied JSON Schema constraints (min_length=2, max_length=4) to ResearchPlan's
+  sub_questions field — guarantees planner produces 2-4 sub-questions regardless
+  of LLM variation, making retrieval cost predictable
+```
+
+---
+
 ### For "AI/ML Engineer" roles
 Lead with: RAG pipeline, RAGAS evaluation, embedding models, hybrid search, reranking
 

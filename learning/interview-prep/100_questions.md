@@ -467,6 +467,49 @@ A: Wrap the entire function in try/except and log a warning. The conversation ke
 
 ---
 
+## SECTION 11: FUNCTION CALLING & STRUCTURED OUTPUTS (Q143–Q155)
+
+**Q143. What is function calling in the context of LLMs?**
+A: Function calling is a model capability where instead of returning free text, the LLM returns a structured call — a function name and JSON arguments — when it decides a tool is needed to answer the question. Your code executes the actual function and sends the result back to the LLM for a final answer. The LLM acts as a decision-maker ("which tool, what arguments") not the executor. Supported by GPT-4, Claude, Llama 3.3, and most modern models.
+
+**Q144. What is the difference between function calling and structured output?**
+A: Function calling: LLM says "call search_documents(query='vacation policy')" — you execute real Python code and send the result back. Structured output: LLM fills in a Pydantic schema you define (e.g., RouteDecision) — no external code runs, the LLM's response IS the final result. Structured output is implemented using function calling under the hood (schema sent as a tool definition), but the purpose is output formatting, not external execution.
+
+**Q145. Why is string parsing of LLM outputs unreliable in production?**
+A: LLMs are trained to be natural, not precise. Ask for "one word: simple or complex" and the model might say "SIMPLE", "simple.", "I would say simple", or even respond in the document's language (French, Japanese) when processing multilingual content. String parsing handles the happy path but fails on edge cases. Structured outputs use the tool-calling pathway which is specifically trained to produce valid JSON — far more reliable than prompt-based formatting instructions.
+
+**Q146. What is JSON Schema and why do LLMs understand it natively?**
+A: JSON Schema is a vocabulary (itself written in JSON) that describes the structure of JSON data — property types, required fields, value constraints (min/max, enum, pattern), nested objects, and arrays. LLMs understand it because virtually all API documentation, OpenAPI specs, and database schemas on the internet use it. Their training data contains millions of (schema → valid JSON) pairs, so they've learned to follow schemas reliably.
+
+**Q147. What is a `Literal` type in Pydantic and how does it affect structured output?**
+A: `Literal["simple", "complex"]` is a Python type that only allows those exact string values — any other value fails Pydantic validation. When converted to JSON Schema: `{"type": "string", "enum": ["simple", "complex"]}`. The LLM sees this constraint and knows it can only output one of those two strings. It's the typed equivalent of asking "answer with exactly one word" but enforced at the data layer, not the prompt layer.
+
+**Q148. Walk me through what happens internally when `llm.with_structured_output(MyModel)` is called.**
+A: (1) LangChain calls `MyModel.model_json_schema()` to get a JSON Schema. (2) Wraps it as a tool definition with `type: "function"`. (3) Binds the tool to the LLM with `tool_choice=forced` (forces the LLM to call this tool). (4) When `.invoke(prompt)` is called, the LLM generates a tool call with JSON arguments matching the schema. (5) LangChain extracts the `arguments` string from the tool call, JSON-parses it, and calls `MyModel.model_validate(parsed)`. (6) Returns a typed Python object. Any Pydantic validation failure raises `ValidationError`.
+
+**Q149. What is the ReAct pattern in LLM agents?**
+A: ReAct = Reason + Act. A loop where: (1) LLM reasons about what it needs, (2) calls a tool (Act), (3) observes the result, (4) reasons again about whether it has enough information, (5) calls another tool or stops. For example: "To compare salaries, I need data from two departments" → call search("engineering salaries") → observe → call search("marketing salaries") → observe → synthesize answer. Used for open-ended tasks where the number of steps isn't known in advance.
+
+**Q150. When should you use a fixed LangGraph vs a ReAct loop?**
+A: Fixed graph when the task structure is known: document Q&A always needs retrieve → generate, so a fixed planner → researcher → synthesizer graph is predictable and debuggable. ReAct loop when the number of steps is unknown at design time: a research assistant browsing the web might need 2 or 10 tool calls. ReAct adds complexity (max iteration limits, cycle detection, tool timeout handling) — use it only when you need the flexibility.
+
+**Q151. What does `tool_choice` do in the API call?**
+A: Controls whether the LLM MUST call a tool or can answer freely. `tool_choice="auto"` (default): LLM decides — calls a tool if needed, answers directly otherwise. `tool_choice="required"`: LLM must call some tool. `tool_choice={"type":"function","function":{"name":"my_tool"}}`: LLM must call this specific tool. `with_structured_output` uses the forced form — the schema is the only tool, and the LLM must call it, turning the entire invocation into a structured extraction.
+
+**Q152. What are parallel tool calls and when do they help?**
+A: Modern LLMs can return multiple tool calls in a single response. Instead of sequential round-trips (call A → wait → get result → call B → wait → get result), the LLM says "call A and B simultaneously." You execute them with `asyncio.gather()` and send both results back. Useful when sub-questions are independent: searching for "revenue" and "expenses" in parallel halves latency. The synthesizer then sees both results at once.
+
+**Q153. How do you write a good tool description?**
+A: The description is the ONLY signal the LLM uses to decide which tool to call. Rules: (1) Be specific about WHEN to use it ("Use this when the question requires information from uploaded documents"). (2) Be specific about when NOT to use it ("Do NOT use for real-time data"). (3) Describe the input format precisely ("a Python-evaluable expression like '847 * 293'"). (4) Describe what it returns ("returns a list of dicts with content, source, and score"). Vague descriptions cause wrong tool selection.
+
+**Q154. What is the `@tool` decorator in LangChain and how does it generate the JSON Schema?**
+A: `@tool` wraps a Python function as a LangChain Tool. It uses the function's (1) name as the tool name, (2) docstring as the tool description, (3) parameter type hints and names as the JSON Schema properties. So `def search(query: str, max_results: int = 5)` with a good docstring becomes a complete tool definition automatically — no manual schema writing. The docstring is critical: it becomes the tool description the LLM reads.
+
+**Q155. How do you prevent a tool from being called with hallucinated arguments?**
+A: (1) Design arguments from information the LLM has in context (question + history) — never require internal IDs the LLM doesn't know. (2) Use Pydantic constraints (min_length, max_length, enum) to limit what values are valid. (3) Validate arguments in your tool code before executing — don't trust the LLM's args blindly. (4) For sensitive tools (delete, send email), require confirmation in the args: `{"action": "delete", "confirm": true}` so the LLM must explicitly commit. (5) Log all tool calls with their arguments for auditing.
+
+---
+
 ## "TELL ME ABOUT YOUR PROJECT" — 3 VERSIONS
 
 ### 30 seconds (elevator pitch)
