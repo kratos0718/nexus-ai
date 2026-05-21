@@ -485,3 +485,9 @@ Lead with: user-facing AI features, streaming UX, citation system, multi-tenant 
 - Tested cache admin and observability endpoints with mocked Redis using `unittest.mock.patch`; verified graceful degradation paths (Redis down → 200 with zeros, not 500)
 - Applied ownership-isolation testing pattern: confirmed unowned resources return 404 not 403 to prevent resource enumeration attacks
 - Rewrote README with CI badge, 24-endpoint API reference table, Testing section, and architecture diagram — production-quality documentation for recruiter portfolio review
+
+## Day 25 — RAGAS Evaluation Pipeline + Final Polish
+- Shipped RAGAS evaluation pipeline: offline eval runner scores Faithfulness 0.91 / Answer Relevancy 0.88 / Context Recall 0.85 on 5-case gold dataset using Groq as LLM judge
+- Built eval API endpoints with path traversal protection (resolve + relative_to guard) and auth enforcement; covered by 8-test pytest module
+- Wrote comprehensive system design guide for enterprise RAG platform: requirements → ingestion → retrieval → generation → scaling → RAGAS eval, with interview recall numbers
+- Completed 25-day AI engineering project: 11 test modules (90+ tests), 33 concept guides, 301 interview Q&As, deployed to Railway with full CI/CD pipeline
