@@ -403,6 +403,28 @@ HuggingFace · sentence-transformers · SQLAlchemy · JWT · WebSockets · RAGAS
 
 ---
 
+## DAY 18 BULLETS — Feedback System & Fine-Tuning Data
+
+```
+• Built user feedback system with thumbs up/down on every AI response —
+  (question, answer, rating, retrieval_mode) stored in PostgreSQL enabling
+  preference data collection for future fine-tuning without interrupting UX
+
+• Implemented JSONL export endpoint streaming rated responses in OpenAI
+  fine-tuning format — filter rating==1 for SFT training data, pair rating==1
+  with rating==-1 for DPO preference pairs (chosen/rejected format)
+
+• Surfaced feedback quality metrics (positive rate, 👍/👎 counts) in the
+  Observability dashboard alongside LLM traces — enables correlation between
+  retrieval mode and user satisfaction to identify failing pipeline components
+
+• Stored retrieval_mode per rating enabling A/B analysis: cross-reference
+  thumbs-down feedback with trace table to determine whether failures are
+  caused by HyDE expansion, multi-query, or standard retrieval
+```
+
+---
+
 ### For "AI/ML Engineer" roles
 Lead with: RAG pipeline, RAGAS evaluation, embedding models, hybrid search, reranking
 

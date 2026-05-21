@@ -16,6 +16,13 @@ interface Stats {
   estimated_cost_usd: number;
 }
 
+interface FeedbackStats {
+  total: number;
+  positive: number;
+  negative: number;
+  positive_rate: number;
+}
+
 interface Trace {
   trace_id: string;
   trace_type: string;
@@ -126,17 +133,20 @@ function TraceRow({ trace }: { trace: Trace }) {
 export default function ObservabilityPage() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [traces, setTraces] = useState<Trace[]>([]);
+  const [feedback, setFeedback] = useState<FeedbackStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   async function fetchData() {
     try {
-      const [statsRes, tracesRes] = await Promise.all([
+      const [statsRes, tracesRes, feedbackRes] = await Promise.all([
         api.get<Stats>("/traces/stats"),
         api.get<{ traces: Trace[]; count: number }>("/traces/"),
+        api.get<FeedbackStats>("/feedback/stats"),
       ]);
       setStats(statsRes.data);
       setTraces(tracesRes.data.traces);
+      setFeedback(feedbackRes.data);
     } catch {
       setError("Failed to load observability data. Make sure the backend is running.");
     } finally {
@@ -168,10 +178,14 @@ export default function ObservabilityPage() {
   }
 
   const s = stats!;
+  const fb = feedback;
   const totalTokens = s.total_tokens.toLocaleString();
   const costStr = s.estimated_cost_usd < 0.01
     ? `< $0.01`
     : `$${s.estimated_cost_usd.toFixed(3)}`;
+
+  const token = typeof window !== "undefined" ? localStorage.getItem("access_token") : null;
+  const exportUrl = `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1"}/feedback/export`;
 
   return (
     <div className="p-8 max-w-5xl mx-auto">
@@ -179,13 +193,38 @@ export default function ObservabilityPage() {
         <h1 className="text-2xl font-bold" style={{ color: "var(--text)" }}>
           Observability
         </h1>
-        <button
-          onClick={fetchData}
-          className="text-xs px-3 py-1.5 rounded-lg border"
-          style={{ borderColor: "var(--border)", color: "var(--text-muted)" }}
-        >
-          Refresh
-        </button>
+        <div className="flex gap-2">
+          {fb && fb.total > 0 && (
+            <a
+              href={exportUrl}
+              download="feedback_export.jsonl"
+              onClick={(e) => {
+                e.preventDefault();
+                fetch(exportUrl, { headers: { Authorization: `Bearer ${token}` } })
+                  .then((r) => r.blob())
+                  .then((blob) => {
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement("a");
+                    a.href = url;
+                    a.download = "feedback_export.jsonl";
+                    a.click();
+                    URL.revokeObjectURL(url);
+                  });
+              }}
+              className="text-xs px-3 py-1.5 rounded-lg border"
+              style={{ borderColor: "var(--border)", color: "var(--text-muted)" }}
+            >
+              Export feedback
+            </a>
+          )}
+          <button
+            onClick={fetchData}
+            className="text-xs px-3 py-1.5 rounded-lg border"
+            style={{ borderColor: "var(--border)", color: "var(--text-muted)" }}
+          >
+            Refresh
+          </button>
+        </div>
       </div>
       <p className="text-sm mb-8" style={{ color: "var(--text-muted)" }}>
         LLM call metrics for your account — updated in real time
@@ -206,6 +245,24 @@ export default function ObservabilityPage() {
           sub="Groq free tier: ~$0"
         />
       </div>
+
+      {/* Feedback stats */}
+      {fb && (
+        <div className="grid grid-cols-3 gap-4 mb-8">
+          <StatCard label="Ratings collected" value={fb.total.toString()} />
+          <StatCard
+            label="Positive rate"
+            value={fb.total > 0 ? `${fb.positive_rate}%` : "—"}
+            sub={`${fb.positive} 👍  ${fb.negative} 👎`}
+            accent={fb.positive_rate >= 70}
+          />
+          <StatCard
+            label="Fine-tuning pairs"
+            value={fb.total > 0 ? fb.total.toString() : "0"}
+            sub="Export as JSONL above"
+          />
+        </div>
+      )}
 
       {/* Error rate + latency range */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
