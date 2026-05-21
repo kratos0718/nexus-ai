@@ -25,6 +25,7 @@ from app.models.conversation import Conversation, Message
 from app.rag.pipeline import RAGPipeline
 from app.schemas.chat import QueryResponse, SourceReference
 from app.core.cache import get_cached_query, set_cached_query, invalidate_document_cache
+from app.services.query_processor import QueryProcessor
 
 
 def _build_pipeline() -> RAGPipeline:
@@ -146,26 +147,66 @@ class RAGService:
 
     # ── Querying ──────────────────────────────────────────────────────
 
+    def _retrieve_multiquery(self, pipeline, variants: list[str], where) -> list:
+        """Retrieve for each query variant, deduplicate by chunk_id, rerank against original."""
+        seen: set[str] = set()
+        merged: list = []
+        for variant in variants:
+            for chunk in pipeline._retrieve(variant, where=where):
+                if chunk.chunk_id not in seen:
+                    seen.add(chunk.chunk_id)
+                    merged.append(chunk)
+        # Re-rank the merged set against the original question (first variant)
+        if pipeline.reranker and len(merged) > 1:
+            return pipeline.reranker.rerank(variants[0], merged, top_k=pipeline.rerank_top_k)
+        return merged[:pipeline.rerank_top_k]
+
     async def query(
         self,
         question: str,
         document_id: Optional[str] = None,
         history: Optional[list[dict]] = None,
+        retrieval_mode: str = "standard",
     ) -> QueryResponse:
         where = {"document_id": document_id} if document_id else None
 
-        # Cache only non-conversational queries (history changes the answer)
-        if not history:
+        # Cache only standard, non-conversational queries
+        if not history and retrieval_mode == "standard":
             cached = get_cached_query(question, where)
             if cached:
                 return QueryResponse(**cached)
 
         pipeline = get_pipeline()
+        processor = QueryProcessor(pipeline.generator.llm)
         loop = asyncio.get_event_loop()
-        result = await loop.run_in_executor(
-            None,
-            lambda: pipeline.query(question, where=where, history=history)
-        )
+
+        if retrieval_mode == "hyde":
+            # Generate hypothetical answer, embed that, then answer original question
+            hyde_text = await loop.run_in_executor(None, lambda: processor.hyde(question))
+            result = await loop.run_in_executor(
+                None,
+                lambda: pipeline.generator.generate(
+                    query=question,
+                    context_results=pipeline._retrieve(hyde_text, where=where),
+                    history=history,
+                )
+            )
+        elif retrieval_mode == "multiquery":
+            # Expand question → retrieve per variant → deduplicate → generate
+            variants = await loop.run_in_executor(None, lambda: processor.expand_queries(question))
+            result = await loop.run_in_executor(
+                None,
+                lambda: pipeline.generator.generate(
+                    query=question,
+                    context_results=self._retrieve_multiquery(pipeline, variants, where),
+                    history=history,
+                )
+            )
+        else:
+            result = await loop.run_in_executor(
+                None,
+                lambda: pipeline.query(question, where=where, history=history)
+            )
 
         response = QueryResponse(
             answer=result.answer,
@@ -184,7 +225,7 @@ class RAGService:
             question=question,
         )
 
-        if not history:
+        if not history and retrieval_mode == "standard":
             set_cached_query(question, response.model_dump(), where)
 
         return response

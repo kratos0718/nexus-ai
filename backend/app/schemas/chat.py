@@ -2,7 +2,7 @@
 Pydantic schemas for chat/query API.
 """
 
-from typing import Optional
+from typing import Literal, Optional
 from pydantic import BaseModel, Field
 
 
@@ -13,6 +13,14 @@ class QueryRequest(BaseModel):
     top_k: int = Field(5, ge=1, le=20)
     use_reranking: bool = True
     use_hybrid: bool = True
+    retrieval_mode: Literal["standard", "hyde", "multiquery"] = Field(
+        "standard",
+        description=(
+            "standard: embed the question directly. "
+            "hyde: generate a hypothetical answer, embed that instead. "
+            "multiquery: generate 3 phrasings, retrieve for each, merge results."
+        ),
+    )
 
 
 class SourceReference(BaseModel):

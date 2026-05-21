@@ -643,3 +643,46 @@ A: The runner processes cases in two phases. Phase 1: loop over all EvalCases �
 
 **Q192. What is path traversal and how does the eval API endpoint guard against it?**
 A: Path traversal is an attack where a user supplies a filename like `../../app/core/config.py` to trick the server into reading files outside the intended directory. The eval endpoint guards against it by: (1) checking the filename matches a safe pattern (`eval_*.json`); (2) calling `path.resolve().relative_to(RESULTS_DIR.resolve())` — if the resolved path isn't inside RESULTS_DIR, `relative_to()` raises ValueError, which we catch and return HTTP 400. Never trust user-supplied filenames without validation.
+
+---
+
+## SECTION 15: ADVANCED RETRIEVAL (Q193–Q205)
+
+**Q193. What is the question-document embedding gap and why does it cause retrieval failures?**
+A: Embedding models are trained on text-text similarity — mostly sentence-sentence or paragraph-paragraph pairs from web data. Questions ("What is photosynthesis?") and answers ("Photosynthesis is the process by which...") appear in training data, but less often than answer-answer pairs. As a result, a question and its ideal answer chunk aren't as close in the embedding space as two answer-like texts would be. The question embeds as "question-shaped" and the document embeds as "answer-shaped." They're related but not maximally close, which causes the right chunk to rank 4th or 5th instead of 1st.
+
+**Q194. Explain HyDE (Hypothetical Document Embeddings). What problem does it solve?**
+A: HyDE closes the question-document embedding gap. Instead of embedding the user's question, it uses an LLM to generate a short hypothetical answer ("write 2-4 sentences that would answer this question"), then embeds THAT. The hypothetical is declarative and document-like — it embeds in the same region as real document chunks. You retrieve against the hypothetical embedding, but generate the final answer from the real retrieved chunks (not the hypothetical). The LLM doesn't need to be factually correct in the hypothetical; it just needs to produce "answer-shaped" text to improve the embedding.
+
+**Q195. Why is the hypothetical in HyDE useful even if the LLM gets the facts wrong?**
+A: Because HyDE's goal is to improve the embedding, not provide a correct answer. The LLM might generate "Chunking splits documents into 500-word pieces" when the actual chunk size in your system is 1000 characters. The factual error doesn't matter — what matters is that the generated text is phrased like a document about chunking, so it embeds near real chunks about chunking. The actual answer is always generated from real retrieved context, not from the hypothetical. Think of the hypothetical as a compass pointing toward the right region of embedding space.
+
+**Q196. What is multi-query retrieval and when does it outperform single-query?**
+A: Multi-query generates N alternative phrasings of the user's question using an LLM ("how does document splitting work?", "why split text before indexing?", "what is text segmentation in RAG?"), retrieves chunks for each phrasing, deduplicates, reranks against the original question, and generates from the merged top-k. It outperforms single-query when: (1) the user's phrasing uses unusual vocabulary not present in the documents; (2) the question is broad and relevant chunks use varied terminology; (3) recall matters more than latency — evaluation pipelines, not real-time chat.
+
+**Q197. Why must you deduplicate before reranking in multi-query retrieval?**
+A: Without deduplication, the same chunk appears multiple times in the merged list (once per query variant that retrieved it). If the chunk appears 3 times, the reranker has to score it 3 times — wasting compute. Worse, if you don't rerank and use position-based merging, the chunk could unfairly dominate the results by virtue of appearing multiple times. Deduplication by chunk_id ensures each unique chunk is scored exactly once by the reranker, against the original question.
+
+**Q198. After merging multi-query results, which question do you rerank against — original or a variant?**
+A: Always the original question. Variants were generated solely to improve retrieval breadth — to find more candidate chunks. Once you have the merged candidates, you're evaluating which ones are most relevant to what the user actually asked. Reranking against a variant would optimize for a paraphrase of the intent, not the intent itself. The reranker's job is to answer: "which of these chunks best answers the user's original question?"
+
+**Q199. Compare HyDE and multi-query: when would you choose one over the other?**
+A: HyDE is best for factual "What is X?" questions where the question and document style differ sharply. It generates one embedding that's "answer-shaped," making 1 LLM call. Multi-query is best for ambiguous or broad questions where different phrasings might surface different chunks. It makes 1 LLM call but performs N retrievals. If the user's vocabulary differs from your documents, multi-query helps more. If the user's question structure (interrogative vs declarative) is the mismatch, HyDE helps more. In practice: HyDE for technical documentation, multi-query for broad knowledge bases.
+
+**Q200. What is Reciprocal Rank Fusion (RRF) and how does it work?**
+A: RRF merges multiple ranked lists into one. For each document in each list, score = 1/(k + rank), where k=60 is a constant and rank starts at 0. Sum scores across all lists, then sort by total score. Documents that appear high in multiple lists get the highest merged scores. The constant k prevents a rank-1 document in one list from completely dominating over a consistent top-5 in three other lists. RRF is rank-based, not score-based — so it works correctly even when merging dense retrieval (cosine similarity 0–1) and BM25 (arbitrary positive scores on different scales).
+
+**Q201. What is step-back prompting and how does it improve retrieval?**
+A: Step-back prompting generates a more general version of the user's question and retrieves for both. User asks "Why does chunk overlap of 200 affect retrieval quality?" — step-back generates "How does chunking work in RAG?" Retrieve for both. The specific question finds directly relevant chunks. The general question finds foundational context that explains the principles behind the specific answer. Combining both gives the LLM richer context. Best for questions that assume background knowledge that may not be in the same chunk as the specific answer.
+
+**Q202. What is parent-child chunking and why is it useful?**
+A: Documents are split at two granularities. Small chunks (200-300 chars) are indexed and used for retrieval — their embeddings are precise because there's less irrelevant surrounding text. Large parent chunks (the full paragraph or section the small chunk came from) are stored separately. When retrieval returns a small chunk, you expand it to its parent before passing to the LLM. This gives the LLM broader context without degrading retrieval precision. The tradeoff: more storage and a lookup step, but higher-quality context windows for generation.
+
+**Q203. What is contextual retrieval (from Anthropic) and how does it differ from standard chunking?**
+A: Before embedding each chunk, an LLM prepends a short context summary: "This chunk is from a Q3 2024 earnings report. It discusses revenue growth in the Asia-Pacific region." Standard chunking embeds raw text — if the chunk says "Revenue grew 23% in APAC," the chunk embedding contains no information about what document this came from or its role in the document. With contextual retrieval, the embedding captures document-level and section-level context that the raw chunk lacks. Retrieval becomes more precise because the embedding knows not just what the chunk says but what it means in context.
+
+**Q204. How do you implement retrieval mode as a feature without breaking existing behavior?**
+A: Add `retrieval_mode` as a schema field with a default of `"standard"`. Existing callers who don't send the field get the default, preserving backward compatibility. The service dispatches based on mode: `if retrieval_mode == "hyde": ... elif retrieval_mode == "multiquery": ... else: standard path`. Add graceful fallbacks in the QueryProcessor — if LLM calls fail, return the original question. This means worst-case is standard retrieval, not an error. The trace_type field records which mode was used, enabling per-mode performance comparison in the observability layer.
+
+**Q205. How would you measure whether HyDE or multi-query actually improves your RAG system?**
+A: Run your eval dataset (`eval/runner.py`) three times — once per mode — and compare RAGAS metrics. Specifically: Context Recall (did retrieval find the right chunks?) and Faithfulness (is the answer grounded in the retrieved context?). You'd expect HyDE and multi-query to improve Context Recall on the cases they help. Also measure latency increase (the extra LLM call). If Context Recall improves by 8% and latency increases by 400ms, that's a concrete trade-off to present to stakeholders. Without measurement, "advanced retrieval improves quality" is just a belief.

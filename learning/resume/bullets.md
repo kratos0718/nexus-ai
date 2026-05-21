@@ -315,6 +315,32 @@ HuggingFace · sentence-transformers · SQLAlchemy · JWT · WebSockets · RAGAS
 
 ---
 
+## DAY 14 BULLETS — Advanced Retrieval: HyDE + Multi-query
+
+```
+• Implemented HyDE (Hypothetical Document Embeddings): LLM generates a
+  short hypothetical answer to the user's question; its embedding is used
+  for retrieval instead of the question embedding — closes the question-
+  document embedding gap that causes relevant chunks to rank below irrelevant
+  ones in naive RAG systems
+
+• Built multi-query retrieval: LLM expands each question into 3 alternative
+  phrasings, retrieves top-k chunks per phrasing, deduplicates by chunk_id,
+  reranks merged set against original question — surfaces chunks that single-
+  query retrieval misses due to vocabulary mismatch
+
+• Exposed retrieval_mode: Literal["standard", "hyde", "multiquery"] as an
+  API parameter on POST /chat/query — zero breaking changes to existing
+  clients (default = "standard"), trace_type logged per mode for A/B
+  comparison via /traces/stats endpoint
+
+• Designed graceful degradation: HyDE and multi-query both fall back to
+  the original question on LLM failure — worst case is standard retrieval,
+  never an error; users never see degraded UX from query expansion failures
+```
+
+---
+
 ### For "AI/ML Engineer" roles
 Lead with: RAG pipeline, RAGAS evaluation, embedding models, hybrid search, reranking
 
