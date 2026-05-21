@@ -63,7 +63,46 @@ function AgentBadge({ meta }: { meta: AgentMeta }) {
   );
 }
 
-function MessageBubble({ msg, agentMeta }: { msg: ChatMessage; agentMeta?: AgentMeta }) {
+function FeedbackButtons({
+  onRate,
+  rated,
+}: {
+  onRate: (r: 1 | -1) => void;
+  rated?: 1 | -1;
+}) {
+  return (
+    <div className="flex gap-0.5 mt-1.5">
+      {([1, -1] as const).map((r) => (
+        <button
+          key={r}
+          onClick={() => !rated && onRate(r)}
+          disabled={!!rated}
+          title={r === 1 ? "Good answer" : "Bad answer"}
+          className="text-sm px-1.5 py-0.5 rounded transition-colors"
+          style={{
+            color: rated === r ? (r === 1 ? "var(--success)" : "var(--danger)") : "var(--text-muted)",
+            background: rated === r ? (r === 1 ? "#10b98120" : "#ef444420") : "transparent",
+            opacity: rated && rated !== r ? 0.3 : 1,
+          }}
+        >
+          {r === 1 ? "👍" : "👎"}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function MessageBubble({
+  msg,
+  agentMeta,
+  onRate,
+  rated,
+}: {
+  msg: ChatMessage;
+  agentMeta?: AgentMeta;
+  onRate?: (r: 1 | -1) => void;
+  rated?: 1 | -1;
+}) {
   const isUser = msg.role === "user";
   return (
     <div className={`flex ${isUser ? "justify-end" : "justify-start"} mb-4`}>
@@ -107,6 +146,9 @@ function MessageBubble({ msg, agentMeta }: { msg: ChatMessage; agentMeta?: Agent
             ))}
           </div>
         )}
+        {!isUser && !msg.streaming && msg.content && onRate && (
+          <FeedbackButtons onRate={onRate} rated={rated} />
+        )}
       </div>
     </div>
   );
@@ -145,6 +187,8 @@ export default function ChatPage() {
   const [activeConvId, setActiveConvId] = useState<string | null>(null);
   const [agentMode, setAgentMode] = useState(true);
   const [retrievalMode, setRetrievalMode] = useState<"standard" | "hyde" | "multiquery">("standard");
+  const [ratings, setRatings] = useState<Record<string, 1 | -1>>({});
+  const [questionMap, setQuestionMap] = useState<Record<string, string>>({});
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -185,6 +229,7 @@ export default function ChatPage() {
 
     const assistantId = crypto.randomUUID();
     setMessages((m) => [...m, { id: assistantId, role: "assistant", content: "", streaming: true }]);
+    setQuestionMap((prev) => ({ ...prev, [assistantId]: question }));
 
     try {
       let convId = activeConvId;
@@ -274,6 +319,21 @@ export default function ChatPage() {
       setSending(false);
       setSteps([]);
       inputRef.current?.focus();
+    }
+  }
+
+  async function rateMessage(msgId: string, msgContent: string, rating: 1 | -1) {
+    setRatings((prev) => ({ ...prev, [msgId]: rating }));
+    try {
+      await api.post("/feedback/", {
+        question: questionMap[msgId] || "",
+        answer: msgContent,
+        rating,
+        conversation_id: activeConvId,
+        retrieval_mode: agentMode ? "standard" : retrievalMode,
+      });
+    } catch {
+      // Rating failure is silent — don't interrupt the user
     }
   }
 
@@ -384,6 +444,12 @@ export default function ChatPage() {
               key={msg.id}
               msg={msg}
               agentMeta={agentMetas[msg.id]}
+              onRate={
+                msg.role === "assistant" && questionMap[msg.id]
+                  ? (r) => rateMessage(msg.id, msg.content, r)
+                  : undefined
+              }
+              rated={ratings[msg.id]}
             />
           ))}
           <StepIndicator steps={steps} />

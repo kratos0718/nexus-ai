@@ -812,3 +812,46 @@ A: Create /api/v2 when making a breaking change: removing a field from a respons
 
 **Q243. How should a /health endpoint behave differently when the RAG pipeline hasn't been initialized yet?**
 A: Return `"pipeline": "not_initialized"` (not an error). The RAG pipeline is lazy-loaded — it initializes on the first query, which can take 10-30 seconds while models load. During startup, the pipeline isn't ready but the API is (auth, database, document upload all work). Reporting `not_initialized` (not `error`) tells the load balancer: the service is accepting traffic. If the pipeline were reported as `error`, the service would be taken out of rotation during the model loading window — every cold start would look like a failure. The pipeline health only matters for query endpoints, not for the overall service health.
+
+---
+
+## SECTION 15: FEEDBACK LOOPS & RLHF (Q244–Q256)
+
+**Q244. What is RLHF and what problem does it solve?**
+A: Reinforcement Learning from Human Feedback — a three-stage technique to align LLMs with human preferences. Stage 1: Supervised Fine-Tuning (SFT) on high-quality (prompt, response) pairs. Stage 2: Train a reward model on human preference comparisons. Stage 3: Use PPO (reinforcement learning) to optimise the LLM to maximise the reward model's score. The problem it solves: training loss on next-token prediction optimises for "what text comes next" not "is this a helpful, accurate, safe answer." Humans must define what "good" means, and RLHF is the mechanism for encoding that into model weights.
+
+**Q245. What are the three stages of RLHF?**
+A: (1) Supervised Fine-Tuning: take a base LLM, train it on high-quality (prompt, response) pairs — teaches format and style of good answers. (2) Reward Model Training: collect pairs of responses to the same prompt with human judgements of which is better, train a separate model to predict human preference scores. (3) RL Optimisation: generate responses with the fine-tuned model, score them with the reward model, use PPO to update weights to maximise scores. A KL divergence penalty keeps the model from drifting too far from the Stage 1 model.
+
+**Q246. What is DPO and how does it differ from PPO-based RLHF?**
+A: Direct Preference Optimisation (2023) achieves the same alignment as RLHF without the RL stage. It directly fine-tunes the model on (prompt, chosen, rejected) preference pairs, increasing probability of chosen relative to rejected. No reward model needed, no RL training loop — standard supervised training. Result: same alignment quality, 10× cheaper, more stable training. Most teams in 2024 use DPO over PPO for alignment tasks. PPO is still used when you need maximal alignment and have a high-quality reward model.
+
+**Q247. What is preference data and why does it use pairs instead of absolute scores?**
+A: Preference data contains triples: (prompt, chosen_response, rejected_response) where a human judged `chosen` better than `rejected`. Pairs are better than absolute scores for two reasons: (1) human raters are unreliable at absolute scoring — "give this a 7/10" varies between raters — but very reliable at relative comparison ("which of these two is better?"); (2) pairs naturally capture the training signal DPO needs — what to increase vs what to decrease.
+
+**Q248. What is reward hacking and how do you prevent it?**
+A: Reward hacking is when the LLM finds patterns that score high on the reward model without actually being better — verbose filler text, false confidence, flattery like "Great question!". Preventions: (1) KL divergence penalty — penalise the model for deviating too far from the reference model, preventing extreme exploitation; (2) update the reward model regularly on new data so the target keeps moving; (3) evaluate on held-out human raters, never just the reward model; (4) diverse training data covering many failure modes.
+
+**Q249. What is the difference between explicit and implicit feedback?**
+A: Explicit: user deliberately signals quality — thumbs up/down, star rating, free-text comment. Reliable signal but low response rate (most users don't rate). Implicit: inferred from behaviour — did the user rephrase and ask again? (suggests wrong answer), did they copy-paste the response? (suggests useful), did they abandon the session after a specific message? (suggests failure). Higher volume but noisier. Production systems use both: explicit for reward model training, implicit for regression detection at scale.
+
+**Q250. What is RLAIF?**
+A: Reinforcement Learning from AI Feedback — uses an LLM as the judge instead of human raters. Cheaper, faster, scalable to millions of examples. Constitutional AI (Anthropic) is a prominent RLAIF variant: the model critiques its own responses against written principles (the "constitution"), then revises them — the revised responses become training data. Limitation: the judge model inherits its own biases and can be sycophantic (prefers responses resembling its training data). Used in Nexus's RAGAS evaluation — Groq/Llama scores Faithfulness and Relevancy.
+
+**Q251. How would you collect fine-tuning data from a RAG system in production?**
+A: (1) Add thumbs up/down UI on every AI response. (2) Store (question, answer, rating, retrieval_mode) in a database. (3) Build an export endpoint that streams JSONL — `{"messages": [{"role": "user", ...}, {"role": "assistant", ...}], "rating": 1}`. (4) Filter by rating==1 for SFT training data. (5) Pair rating==1 and rating==-1 answers to the same question for DPO pairs. (6) Analyse rating==-1 responses to identify which retrieval modes or document types cause failures. This closes the loop: deploy → collect → analyse → improve.
+
+**Q252. What is the cold start problem in feedback collection?**
+A: On day one, no users means no feedback. No feedback means no fine-tuning signal. Solutions: seed with synthetic data (use GPT-4 to generate (question, good answer, bad answer) triples), have your team rate responses before public launch, start with implicit signals (session abandonment, follow-up questions) before adding explicit ratings, or use RLAIF to generate initial preference data without human raters. The goal is to break the cycle — once you have some signal, genuine user feedback takes over.
+
+**Q253. What is the OpenAI fine-tuning data format?**
+A: Newline-delimited JSON (JSONL) where each line is a complete training example with a `messages` array following the chat format: `{"messages": [{"role": "system", "content": "..."}, {"role": "user", "content": "..."}, {"role": "assistant", "content": "..."}]}`. One example per line. File is uploaded to OpenAI, which runs supervised fine-tuning. For DPO, the format adds `chosen` and `rejected` fields at the top level instead of `messages`.
+
+**Q254. How do you handle annotation bias in human feedback data?**
+A: Randomise response order in A/B comparisons (position bias — humans prefer the first option shown). Use multiple raters per example and take majority vote (reduces individual bias). Include calibration examples with known-correct answers to identify unreliable raters and remove their data. Track per-rater agreement rates — raters below 70% agreement with the majority are unreliable. For domain-specific tasks (technical questions about RAG), use domain experts as raters rather than general crowdsourcing.
+
+**Q255. When would you use feedback ratings vs RAGAS for evaluating your RAG system?**
+A: Use RAGAS for objective pipeline metrics: Faithfulness (is the answer grounded in the retrieved context?), Answer Relevancy (does the answer address the question?). RAGAS runs automatically, scales to any volume, catches hallucinations. Use human feedback for subjective quality: "Was this useful?", "Was the tone right?", "Did this answer what I actually meant?" Feedback catches failures RAGAS misses — an answer can be fully grounded in context but still be unhelpfully verbose or missing the point. Both signals together: RAGAS high + positive rate low → fix tone/verbosity, not retrieval.
+
+**Q256. Why store retrieval_mode in the feedback table?**
+A: To enable per-mode quality analysis. If you see that HyDE retrieval consistently gets 👎 but standard retrieval gets 👍 for similar questions, the problem is in the query expansion, not the LLM generation. You can cross-reference feedback with the observability traces (which also store trace_type by retrieval mode) to confirm the pattern. Without storing the mode, you'd see a low overall positive rate but couldn't tell which pipeline component is responsible for the failures.
