@@ -199,11 +199,42 @@ The [`/learning`](./learning) directory is a complete study guide — written to
 
 ---
 
+## Deploy to Railway
+
+Railway is a PaaS (like Heroku) that runs Docker containers with automatic PostgreSQL and Redis provisioning.
+
+**One-time setup:**
+
+```bash
+# 1. Install Railway CLI
+npm install -g @railway/cli
+
+# 2. Login and create project
+railway login
+cd backend && railway init     # creates a new Railway project
+
+# 3. Add managed services (Railway provisions these automatically)
+railway add --plugin postgresql
+railway add --plugin redis
+
+# 4. Set required environment variables in Railway dashboard
+#    See backend/.env.production.example for the full list
+
+# 5. Deploy manually (GitHub Actions CD handles future pushes)
+railway up --service nexus-backend
+```
+
+**Automatic deploys via GitHub Actions:**
+Add `RAILWAY_TOKEN` (from railway.app/account/tokens) as a GitHub repository secret.
+Every push to `main` that passes CI will automatically deploy both services.
+
+---
+
 ## Tech Stack
 
 ```
 Backend    Python · FastAPI · LangChain · LangGraph · SQLAlchemy · Alembic · Celery
 AI/ML      Groq (Llama 3.3-70B) · sentence-transformers · ChromaDB · Pinecone · RAGAS
 Frontend   Next.js 15 · TypeScript · Tailwind CSS
-Infra      PostgreSQL · Redis · Docker · GitHub Actions
+Infra      PostgreSQL · Redis · Docker · GitHub Actions · Railway
 ```

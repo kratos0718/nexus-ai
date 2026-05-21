@@ -170,6 +170,12 @@ async def health(db: AsyncSession = Depends(get_db)):
     return {"status": overall, "version": "1.0.0", "checks": checks}
 
 
+@app.get("/ping", tags=["system"])
+async def ping():
+    """Lightweight liveness probe — no DB, no dependencies. Railway uses this during cold start."""
+    return {"status": "ok"}
+
+
 @app.get("/", tags=["system"])
 async def root():
     return {"message": "Nexus AI", "docs": "/docs", "health": "/health"}
