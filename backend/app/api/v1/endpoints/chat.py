@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.dependencies import rate_limit_user
+from app.core.security_guard import security_guard
 from app.models.user import User
 from app.services.rag_service import rag_service
 from app.services.trace_service import trace_service
@@ -35,6 +36,8 @@ async def query(
     Optionally pass conversation_id to get multi-turn context injected.
     If document_id is provided, only searches within that document.
     """
+    question = security_guard.validate_question(question)
+
     if request.document_id:
         doc = await rag_service.get_document(db, request.document_id)
         if not doc:
@@ -57,7 +60,7 @@ async def query(
     t0 = time.monotonic()
     try:
         result = await rag_service.query(
-            question=request.question,
+            question=question,
             document_id=request.document_id,
             history=history,
         )
@@ -68,7 +71,7 @@ async def query(
     background_tasks.add_task(
         trace_service.record,
         db=db,
-        question=request.question,
+        question=question,
         answer=result.answer,
         model=result.model,
         prompt_tokens=result.prompt_tokens,
@@ -84,7 +87,7 @@ async def query(
         is_first_message = len(conversation.messages) == 0
         await rag_service.add_message(
             db, conversation.conversation_id,
-            role="user", content=request.question,
+            role="user", content=question,
         )
         await rag_service.add_message(
             db, conversation.conversation_id,
@@ -97,7 +100,7 @@ async def query(
         if is_first_message and conversation.title == "New Conversation":
             background_tasks.add_task(
                 rag_service._auto_title_conversation,
-                db, conversation.conversation_id, request.question,
+                db, conversation.conversation_id, question,
             )
 
     return result
@@ -117,6 +120,8 @@ async def query_stream(
       data: [SOURCES]{...}\\n\\n
       data: [DONE]\\n\\n
     """
+    question = security_guard.validate_question(request.question)
+
     if request.document_id:
         doc = await rag_service.get_document(db, request.document_id)
         if not doc:
@@ -131,7 +136,7 @@ async def query_stream(
 
     return StreamingResponse(
         rag_service.query_stream(
-            question=request.question,
+            question=question,
             document_id=request.document_id,
             history=history,
         ),

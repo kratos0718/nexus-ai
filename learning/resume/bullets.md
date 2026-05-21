@@ -267,6 +267,28 @@ HuggingFace · sentence-transformers · SQLAlchemy · JWT · WebSockets · RAGAS
 
 ---
 
+## DAY 12 BULLETS — Security + CI/CD
+
+```
+• Built SecurityGuard layer validating all LLM inputs: 11 prompt injection
+  regex patterns, 2000-char length cap, null-byte stripping — wired into
+  /chat/query, /chat/stream, /agent/query, /agent/stream before the pipeline
+
+• Implemented SSRF protection blocking private IP ranges (localhost, 10.x,
+  192.168.x, 172.16-31.x) on URL indexing endpoint, and magic-byte validation
+  for file uploads detecting MIME-type spoofing (e.g. .exe renamed to .pdf)
+
+• Wrote 27 pytest unit tests covering all SecurityGuard methods including
+  13 parameterized injection patterns and false-positive checks for legitimate
+  questions containing words like "instructions" and "rules"
+
+• Set up GitHub Actions CI pipeline: runs full test suite on every push/PR
+  in a fresh Ubuntu VM with Python 3.12 and pip caching — SQLite in-memory
+  means zero external services needed, pipeline completes in ~90 seconds
+```
+
+---
+
 ### For "AI/ML Engineer" roles
 Lead with: RAG pipeline, RAGAS evaluation, embedding models, hybrid search, reranking
 

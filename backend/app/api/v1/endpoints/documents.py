@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.dependencies import get_current_user
+from app.core.security_guard import security_guard
 from app.models.user import User
 from app.services.rag_service import rag_service
 from app.schemas.document import (
@@ -58,6 +59,7 @@ async def upload_document(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
             detail=f"File too large. Max size: {MAX_FILE_SIZE // 1024 // 1024}MB",
         )
+    security_guard.validate_file_bytes(file_bytes, suffix)
 
     document_id = str(uuid.uuid4())
     temp_path = UPLOAD_DIR / f"{document_id}{suffix}"
@@ -107,6 +109,7 @@ async def index_url(
     current_user: User = Depends(get_current_user),
 ):
     """Index content from a web URL."""
+    security_guard.validate_url(request.url)
     document_id = str(uuid.uuid4())
     display_name = request.document_name or request.url[:80]
 
