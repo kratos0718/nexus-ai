@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.dependencies import rate_limit_user
+from app.core.security_guard import security_guard
 from app.models.user import User
 from app.services.agent_service import agent_service
 from app.services.rag_service import rag_service
@@ -36,6 +37,8 @@ async def agent_query(
 
     Returns routing metadata so the UI can show how the query was handled.
     """
+    question = security_guard.validate_question(request.question)
+
     if request.document_id:
         doc = await rag_service.get_document(db, request.document_id, user_id=current_user.id)
         if not doc:
@@ -50,7 +53,7 @@ async def agent_query(
 
     try:
         result = await agent_service.run(
-            question=request.question,
+            question=question,
             document_id=request.document_id,
             history=history,
         )
@@ -85,6 +88,8 @@ async def agent_stream(
       data: [SOURCES]{...}     ← source citations
       data: [DONE]             ← stream complete
     """
+    question = security_guard.validate_question(request.question)
+
     if request.document_id:
         doc = await rag_service.get_document(db, request.document_id, user_id=current_user.id)
         if not doc:
@@ -98,7 +103,7 @@ async def agent_stream(
 
     return StreamingResponse(
         agent_service.stream(
-            question=request.question,
+            question=question,
             document_id=request.document_id,
             history=history,
         ),
