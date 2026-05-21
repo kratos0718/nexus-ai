@@ -942,3 +942,22 @@ A: Coverage is the % of source lines executed when tests run. For AI/ML backends
 
 **Q281. What does `ruff` replace and why is it preferred in modern Python projects?**
 A: Ruff replaces flake8 (style/errors), isort (import sorting), pylint (code quality), and parts of pyupgrade — all in a single tool written in Rust. It runs 10-100x faster than the tools it replaces, has sensible defaults, and has become the standard linter in modern Python projects. Rule sets are selected with `--select E,F,W,I` matching flake8/isort conventions.
+
+---
+
+## Day 22 — Cloud Deployment
+
+**Q282. What is a PaaS and why use it over raw cloud VMs?**
+A: PaaS (Platform as a Service) manages servers, networking, load balancing, and TLS for you. You push code or a Docker image; the platform runs it. Raw VMs (IaaS like EC2) give more control but require you to manage everything yourself. For MVPs and startups, PaaS (Railway, Render, Fly.io) reduces ops burden significantly — they provision databases, handle SSL, auto-restart on crash, and provide logs/metrics with zero extra config.
+
+**Q283. Why does Railway inject $PORT and not use a fixed port like 8000?**
+A: Multiple containers run on shared physical hosts. Each needs a unique port. Railway's reverse proxy maps HTTPS:443 → container's dynamic port. Hardcoding 8000 would conflict when multiple containers run on the same host. The `${PORT:-8000}` pattern reads Railway's injected port in production and falls back to 8000 locally — the same Dockerfile works in both environments.
+
+**Q284. What is the difference between a liveness probe and a readiness probe?**
+A: Liveness: is the process alive? A cheap `/ping` endpoint — always returns 200 as long as Python is running. If it fails, the container is restarted. Readiness: is the service ready to serve traffic? A deeper `/health` endpoint that checks database, cache, etc. If it fails, stop routing traffic (but don't restart — it might be warming up). Railway's `healthcheckPath` acts as a readiness gate during deploys.
+
+**Q285. How do you run database migrations in a CD pipeline safely?**
+A: Simple approach: include `alembic upgrade head` in the Docker CMD before starting the server. Every container run applies pending migrations. Safe for additive changes. Scalable approach: run a one-shot migration job before deploying new app containers — prevents N containers running N migrations simultaneously and creates a clear failure point. Nexus AI uses the simple approach; switch to the one-shot pattern before scaling beyond one instance.
+
+**Q286. What happens when an API key is accidentally committed to git?**
+A: The key is permanently in git history even after deleting the file — visible to anyone who clones the repo. Immediate response: rotate the key at the provider (get a new one, invalidate the old), then scrub history with `git filter-repo` or BFG Repo Cleaner and force-push. Prevention: `.gitignore` for all `.env` files, pre-commit hooks with `detect-secrets` or `gitleaks`, and storing secrets only in platform-managed secret stores (Railway Variables, GitHub Secrets).

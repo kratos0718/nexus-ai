@@ -467,3 +467,9 @@ Lead with: user-facing AI features, streaming UX, citation system, multi-tenant 
 - Wrote 21 pytest tests covering system prompt CRUD and feedback endpoints including multi-user ownership isolation
 - Configured pytest-cov with 40% minimum threshold; integrated ruff linter replacing flake8+isort
 - Implemented in-memory SQLite test strategy with SQLAlchemy dependency override for fast, isolated test runs
+
+## Day 22 — Cloud Deployment (Railway)
+- Deployed FastAPI + Next.js to Railway PaaS using multi-stage Dockerfiles with non-root user security
+- Configured separate liveness (/ping) and readiness (/health) probes; Railway healthcheck with 300s cold-start timeout for ML model loading
+- Extended GitHub Actions CI to a full CD pipeline: push to main → tests pass → Railway auto-deploys both services
+- Created production environment setup guide with Railway plugin variable injection and CORS configuration
