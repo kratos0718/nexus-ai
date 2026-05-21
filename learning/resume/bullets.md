@@ -382,6 +382,27 @@ HuggingFace · sentence-transformers · SQLAlchemy · JWT · WebSockets · RAGAS
 
 ---
 
+## DAY 17 BULLETS — Production Hardening
+
+```
+• Implemented request ID middleware (Starlette BaseHTTPMiddleware) attaching
+  a UUID to every request via X-Request-ID header — stored in request.state,
+  echoed in responses, included in 500 error bodies; enables support to locate
+  exact log lines for any user-reported failure in seconds
+
+• Upgraded /health endpoint from a stub to a subsystem probe: independently
+  checks PostgreSQL (SELECT 1), Redis (PING), RAG pipeline initialization,
+  and vector store chunk count — returns "degraded" vs "error" to distinguish
+  optional vs critical subsystem failures for load balancer routing
+
+• Configured environment-driven structured logging: LOG_FORMAT=json outputs
+  newline-delimited JSON (compatible with Datadog/Grafana Loki/CloudWatch),
+  LOG_FORMAT=text outputs coloured human-readable output — zero code changes
+  between environments, enqueue=True for thread-safe async log writes
+```
+
+---
+
 ### For "AI/ML Engineer" roles
 Lead with: RAG pipeline, RAGAS evaluation, embedding models, hybrid search, reranking
 
