@@ -172,3 +172,53 @@ async def delete_document(
     deleted = await rag_service.delete_document(db, document_id, user_id=current_user.id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Document not found")
+
+
+@router.get("/{document_id}/chunks", summary="Browse indexed chunks for a document")
+async def get_document_chunks(
+    document_id: str,
+    offset: int = 0,
+    limit: int = 20,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Return the raw text chunks stored in the vector store for one document.
+    Ordered by chunk_index (document reading order).
+    Useful for debugging retrieval quality and exploring indexed content.
+    """
+    doc = await rag_service.get_document(db, document_id, user_id=current_user.id)
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+    if doc.status != "ready":
+        raise HTTPException(status_code=409, detail=f"Document not ready (status: {doc.status})")
+
+    from app.services.rag_service import get_pipeline
+    import asyncio
+
+    pipeline = get_pipeline()
+    loop = asyncio.get_event_loop()
+    all_chunks = await loop.run_in_executor(
+        None,
+        lambda: pipeline.vector_store.get_document_chunks(document_id),
+    )
+
+    page = all_chunks[offset: offset + limit]
+    return {
+        "document_id": document_id,
+        "filename": doc.filename,
+        "total_chunks": len(all_chunks),
+        "offset": offset,
+        "limit": limit,
+        "chunks": [
+            {
+                "chunk_id": c.chunk_id,
+                "chunk_index": c.metadata.get("chunk_index", 0),
+                "text": c.text,
+                "source": c.metadata.get("source", ""),
+                "page": c.metadata.get("page"),
+                "char_count": len(c.text),
+            }
+            for c in page
+        ],
+    }

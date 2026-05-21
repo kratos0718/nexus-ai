@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { api } from "@/lib/api";
 import type { Document } from "@/types";
 
@@ -182,7 +183,7 @@ export default function DashboardPage() {
           <table className="w-full text-sm">
             <thead>
               <tr style={{ borderBottom: "1px solid var(--border)" }}>
-                {["Name", "Type", "Size", "Chunks", "Status", ""].map((h) => (
+                {["Name", "Type", "Size", "Chunks", "Status", "", ""].map((h) => (
                   <th
                     key={h}
                     className="text-left px-4 py-3 font-medium"
@@ -214,6 +215,17 @@ export default function DashboardPage() {
                   </td>
                   <td className="px-4 py-3">
                     <StatusBadge status={doc.status} />
+                  </td>
+                  <td className="px-4 py-3">
+                    {doc.status === "ready" && (
+                      <Link
+                        href={`/dashboard/${doc.document_id}`}
+                        className="text-xs"
+                        style={{ color: "var(--accent)" }}
+                      >
+                        Explore
+                      </Link>
+                    )}
                   </td>
                   <td className="px-4 py-3">
                     <button

@@ -1,7 +1,7 @@
 """Combines all v1 endpoint routers under /api/v1."""
 
 from fastapi import APIRouter
-from app.api.v1.endpoints import documents, chat, auth, conversations, agent, traces, eval
+from app.api.v1.endpoints import documents, chat, auth, conversations, agent, traces, eval, search
 
 api_router = APIRouter()
 
@@ -12,3 +12,4 @@ api_router.include_router(conversations.router, prefix="/conversations",  tags=[
 api_router.include_router(agent.router,         prefix="/agent",         tags=["agent"])
 api_router.include_router(traces.router,        prefix="/traces",        tags=["observability"])
 api_router.include_router(eval.router,          prefix="/eval",          tags=["evaluation"])
+api_router.include_router(search.router,        prefix="/search",        tags=["search"])
