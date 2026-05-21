@@ -72,13 +72,24 @@ async def upload_document(
         file_size_bytes=len(file_bytes),
     )
 
-    background_tasks.add_task(
-        rag_service.index_file_background,
-        file_path=str(temp_path),
-        document_id=document_id,
-        db=db,
-        original_filename=file.filename,
-    )
+    # Prefer Celery (separate worker process) — fall back to asyncio background task
+    # when Celery/Redis is unavailable (local dev without Redis)
+    celery_dispatched = False
+    try:
+        from app.workers.document_tasks import index_document
+        index_document.delay(document_id, str(temp_path), file.filename)
+        celery_dispatched = True
+    except Exception:
+        pass
+
+    if not celery_dispatched:
+        background_tasks.add_task(
+            rag_service.index_file_background,
+            file_path=str(temp_path),
+            document_id=document_id,
+            db=db,
+            original_filename=file.filename,
+        )
 
     return DocumentUploadResponse(
         document_id=document_id,

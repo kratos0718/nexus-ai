@@ -24,6 +24,7 @@ from app.models.document import Document, DocumentStatus
 from app.models.conversation import Conversation, Message
 from app.rag.pipeline import RAGPipeline
 from app.schemas.chat import QueryResponse, SourceReference
+from app.core.cache import get_cached_query, set_cached_query, invalidate_document_cache
 
 
 def _build_pipeline() -> RAGPipeline:
@@ -151,16 +152,22 @@ class RAGService:
         document_id: Optional[str] = None,
         history: Optional[list[dict]] = None,
     ) -> QueryResponse:
-        pipeline = get_pipeline()
         where = {"document_id": document_id} if document_id else None
 
+        # Cache only non-conversational queries (history changes the answer)
+        if not history:
+            cached = get_cached_query(question, where)
+            if cached:
+                return QueryResponse(**cached)
+
+        pipeline = get_pipeline()
         loop = asyncio.get_event_loop()
         result = await loop.run_in_executor(
             None,
             lambda: pipeline.query(question, where=where, history=history)
         )
 
-        return QueryResponse(
+        response = QueryResponse(
             answer=result.answer,
             sources=[
                 SourceReference(
@@ -176,6 +183,11 @@ class RAGService:
             completion_tokens=result.completion_tokens,
             question=question,
         )
+
+        if not history:
+            set_cached_query(question, response.model_dump(), where)
+
+        return response
 
     async def query_stream(
         self,
@@ -393,6 +405,8 @@ class RAGService:
             pipeline._rebuild_bm25()
         except Exception as e:
             logger.warning(f"Vector store delete failed: {e}")
+
+        invalidate_document_cache(document_id)
 
         await db.delete(doc)
         await db.commit()
