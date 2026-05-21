@@ -855,3 +855,43 @@ A: Use RAGAS for objective pipeline metrics: Faithfulness (is the answer grounde
 
 **Q256. Why store retrieval_mode in the feedback table?**
 A: To enable per-mode quality analysis. If you see that HyDE retrieval consistently gets 👎 but standard retrieval gets 👍 for similar questions, the problem is in the query expansion, not the LLM generation. You can cross-reference feedback with the observability traces (which also store trace_type by retrieval mode) to confirm the pattern. Without storing the mode, you'd see a low overall positive rate but couldn't tell which pipeline component is responsible for the failures.
+
+---
+
+## SECTION 16: CHUNKING STRATEGIES (Q257–Q268)
+
+**Q257. What is chunking in RAG and why does it matter more than people think?**
+A: Chunking splits documents into smaller pieces before embedding and storing in a vector database. Each chunk gets one embedding vector, and retrieval returns chunks — not whole documents. The strategy determines whether retrieved chunks contain coherent, complete information. A bad chunking strategy (mid-sentence splits, wrong size) cannot be fixed by a better embedding model or retrieval algorithm — the information is either in the chunk or it isn't. Chunking is upstream of every other RAG component.
+
+**Q258. What is recursive character chunking and why is it the default for most RAG systems?**
+A: Recursive chunking tries to split at natural boundaries in priority order: paragraph breaks (`\n\n`) → line breaks (`\n`) → sentence endings (`". "`) → words → characters. It's the default because it respects document structure. Paragraphs are usually logical units the author intended as one idea. Splitting on `\n\n` gives chunks that correspond to those units. Only falls through to finer boundaries when the paragraph is too large. LangChain's `RecursiveCharacterTextSplitter` is the canonical implementation.
+
+**Q259. What is semantic chunking and how does the algorithm work?**
+A: Semantic chunking detects topic boundaries using embedding similarity between consecutive sentences. Steps: (1) split document into sentences with regex; (2) embed all sentences in a batch; (3) compute cosine similarity between each consecutive pair; (4) find threshold = mean − 0.5×std; (5) split where similarity drops below threshold (topic shift) or chunk would exceed max size. Produces chunks that correspond to actual topic changes rather than arbitrary character counts. Best for raw, unstructured text.
+
+**Q260. What is the retrieval-generation tension in choosing chunk size?**
+A: Small chunks (50–200 chars): embedding is specific to one fact → precise retrieval, but LLM gets little context (fragment without explanation). Large chunks (2000–5000 chars): LLM gets rich context, but embedding averages across many topics → imprecise retrieval. The sweet spot is 800–1200 characters — specific enough for precise retrieval, rich enough for good generation. Chunk overlap of 10–20% prevents information loss at split boundaries.
+
+**Q261. What is chunk overlap and when does it help?**
+A: Overlap repeats the last N characters of chunk K at the start of chunk K+1. It helps when an answer spans a split boundary: without overlap, a sentence split across two chunks may have neither chunk rank highly for the full sentence. With overlap, the boundary region appears in both adjacent chunks, so at least one retrieves well. Diminishing returns above 25% overlap — you're mostly duplicating content, wasting storage and embedding compute.
+
+**Q262. What is parent-child retrieval (small-to-big)?**
+A: Index small child chunks (256 chars) for precise embedding match, but store larger parent chunks (1024 chars) each child belongs to. On retrieval: find the best child chunks by similarity, then return the parent chunk to the LLM for generation. You get the precision of small-chunk retrieval (specific topic → good match) with the context richness of large chunks (LLM gets full paragraphs). Requires a `parent_chunk_id` in child metadata and a lookup step after retrieval.
+
+**Q263. What is sentence-window retrieval?**
+A: Index individual sentences for precise matching. When a sentence is retrieved, expand to a window of ±2 surrounding sentences before passing to the LLM. Example: sentence 5 matches → LLM gets sentences 3–7. Gives exact retrieval precision with enough surrounding context for the LLM to understand the answer. Simpler than parent-child because no separate parent storage is needed — just retrieve adjacent sentences by index.
+
+**Q264. What is proposition-based chunking?**
+A: Instead of splitting at text boundaries, use an LLM to extract self-contained propositions (atomic facts) from the document. Input: "RAG was introduced in 2020. It combines retrieval with generation." Output: ["RAG stands for Retrieval-Augmented Generation", "RAG was introduced in 2020", "RAG combines retrieval with generation"]. Each proposition is a complete, standalone claim with perfect embedding specificity. Extremely precise retrieval. Very expensive — requires an LLM call per document during indexing. Used in production systems where recall precision is critical (medical, legal, finance).
+
+**Q265. How do you pass a chunking strategy alongside a file upload in FastAPI?**
+A: Mix `UploadFile = File(...)` with `chunking_strategy: str = Form("recursive")` in the same endpoint signature. FastAPI reads both from the multipart/form-data body. The client appends both parts to FormData: `form.append("file", file); form.append("chunking_strategy", "semantic")`. The Form parameter gets a default so existing clients that don't send it continue working (backward compatible).
+
+**Q266. Why does semantic chunking require passing the embedder at indexing time?**
+A: Semantic chunking detects topic boundaries by comparing consecutive sentence embeddings. It must embed every sentence in the document before deciding where to split. This requires a live embedder instance (sentence-transformers model loaded in memory). Recursive and fixed chunking are purely text-based — they only look at character counts and string patterns. No model needed. This is why semantic chunking is slower and why the pipeline only passes `embedder=self.embedder` when `strategy == "semantic"`.
+
+**Q267. How do you evaluate chunking quality?**
+A: Three approaches: (1) Visual inspection — open the Knowledge Base Explorer and read chunk text; good chunks are self-contained units of meaning, bad chunks cut sentences in half. (2) Retrieval comparison — run the same query with different strategies, compare which chunks are retrieved and whether they contain the expected answer. (3) End-to-end RAGAS — measure Faithfulness and Answer Relevancy before and after changing strategy on the same document corpus; better chunking shows up as higher Context Recall.
+
+**Q268. When would you choose semantic chunking over recursive in a production RAG system?**
+A: Choose semantic when: (1) documents lack structural markers (no `\n\n` paragraph breaks) — raw OCR output, speech transcripts, web scrapes; (2) documents are dense with rapid topic shifts within paragraphs — some technical papers, legal contracts, medical records; (3) retrieval precision is more important than indexing speed — the extra embedding compute at indexing time is acceptable for the quality gain. Choose recursive by default for well-structured documents (Markdown, PDFs with clear sections) and when indexing latency matters.

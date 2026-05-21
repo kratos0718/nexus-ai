@@ -403,6 +403,25 @@ HuggingFace · sentence-transformers · SQLAlchemy · JWT · WebSockets · RAGAS
 
 ---
 
+## DAY 19 BULLETS — Configurable Chunking Strategies
+
+```
+• Exposed three chunking strategies (recursive / semantic / fixed) as a per-
+  document upload parameter — semantic strategy uses embedding cosine similarity
+  between consecutive sentences to detect topic boundaries, producing chunks
+  aligned with content structure rather than arbitrary character counts
+
+• Threaded chunking_strategy through the full document pipeline: FastAPI Form
+  field → RAG service background task → Celery worker → pipeline.index_file()
+  override — existing clients default to recursive (backward compatible)
+
+• Added chunking strategy selector to the document upload UI — users can
+  compare chunk quality for the same document with different strategies using
+  the Knowledge Base Explorer (chunk text visible per strategy)
+```
+
+---
+
 ## DAY 18 BULLETS — Feedback System & Fine-Tuning Data
 
 ```

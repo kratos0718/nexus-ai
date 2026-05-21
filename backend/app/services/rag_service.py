@@ -80,6 +80,7 @@ class RAGService:
         document_id: str,
         db: AsyncSession,
         original_filename: Optional[str] = None,
+        chunk_strategy: Optional[str] = None,
     ) -> None:
         """
         Indexes a file in a background task.
@@ -100,6 +101,7 @@ class RAGService:
                     file_path,
                     document_id=document_id,
                     display_name=original_filename,
+                    chunk_strategy=chunk_strategy,
                 )
             )
 
