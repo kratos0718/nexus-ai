@@ -11,7 +11,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.dependencies import get_current_user
+from app.core.dependencies import rate_limit_user
 from app.models.user import User
 from app.services.agent_service import agent_service
 from app.services.rag_service import rag_service
@@ -25,7 +25,7 @@ router = APIRouter()
 async def agent_query(
     request: AgentQueryRequest,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(rate_limit_user),
 ):
     """
     Multi-agent RAG query.
@@ -72,7 +72,7 @@ async def agent_query(
 async def agent_stream(
     request: AgentQueryRequest,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(rate_limit_user),
 ):
     """
     Streaming multi-agent query. SSE events show each agent step:

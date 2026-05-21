@@ -205,6 +205,27 @@ HuggingFace · sentence-transformers · SQLAlchemy · JWT · WebSockets · RAGAS
 
 ---
 
+## DAY 9 BULLETS — Rate Limiting + Smart Conversations
+
+```
+• Implemented Redis fixed-window rate limiting (100 req/hr per user) as a
+  composable FastAPI dependency — applied to all LLM endpoints in one line,
+  with 429 + Retry-After response headers and graceful Redis-down fallback
+
+• Built conversation history windowing: caps context passed to LLM at last
+  10 messages, preventing context overflow and keeping per-query token costs
+  predictable regardless of conversation length
+
+• Added LLM-powered auto-titling: generates 4-6 word conversation title from
+  the first user question via Groq, fires as a non-blocking BackgroundTask
+  after the response is sent — zero latency impact on the user
+
+• Added PATCH /conversations/{id}/title endpoint for manual rename with
+  ownership validation — users can only rename their own conversations
+```
+
+---
+
 ### For "AI/ML Engineer" roles
 Lead with: RAG pipeline, RAGAS evaluation, embedding models, hybrid search, reranking
 

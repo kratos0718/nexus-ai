@@ -6,12 +6,12 @@ POST /chat/stream  — streaming version via Server-Sent Events (auth required)
 GET  /chat/health  — verify LLM is reachable (public)
 """
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.dependencies import get_current_user
+from app.core.dependencies import rate_limit_user
 from app.models.user import User
 from app.services.rag_service import rag_service
 from app.schemas.chat import QueryRequest, QueryResponse
@@ -22,8 +22,9 @@ router = APIRouter()
 @router.post("/query", response_model=QueryResponse)
 async def query(
     request: QueryRequest,
+    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(rate_limit_user),
 ):
     """
     Ask a question against the indexed knowledge base.
@@ -61,6 +62,7 @@ async def query(
 
     # Persist messages to conversation if one was provided
     if conversation:
+        is_first_message = len(conversation.messages) == 0
         await rag_service.add_message(
             db, conversation.conversation_id,
             role="user", content=request.question,
@@ -72,6 +74,12 @@ async def query(
             prompt_tokens=result.prompt_tokens,
             completion_tokens=result.completion_tokens,
         )
+        # Auto-generate title from first question (runs after response is sent)
+        if is_first_message and conversation.title == "New Conversation":
+            background_tasks.add_task(
+                rag_service._auto_title_conversation,
+                db, conversation.conversation_id, request.question,
+            )
 
     return result
 
@@ -80,7 +88,7 @@ async def query(
 async def query_stream(
     request: QueryRequest,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(rate_limit_user),
 ):
     """
     Streaming version of /query. Returns Server-Sent Events.

@@ -427,6 +427,46 @@ A: Celery workers prefetch multiple tasks from the queue to reduce round-trip ov
 
 ---
 
+## SECTION 10: RATE LIMITING & CONVERSATION MANAGEMENT (Q131–Q142)
+
+**Q131. What is rate limiting and why does an AI API need it?**
+A: Rate limiting caps how many requests a client can make in a time window. For AI APIs specifically: LLM inference costs money (tokens) or exhausts free-tier quotas, and embedding + vector search adds latency. Without limits, a single user can drain your Groq quota in minutes or spike your costs unexpectedly. Rate limiting also protects against accidental loops in client code that hammer the API.
+
+**Q132. Explain the fixed window rate limiting algorithm.**
+A: Divide time into fixed windows (e.g., hourly). Each window gets a counter stored in Redis. On each request, atomically increment the counter (`INCR`). If counter exceeds limit, return 429. The window key includes a timestamp floor (`int(time.time()) // 3600`), so the counter auto-resets each hour when the key suffix changes. Simple and fast, but allows a burst at window boundaries: a user can make 100 requests at 9:59 and 100 more at 10:01.
+
+**Q133. Why use Redis INCR instead of GET + SET for rate limiting?**
+A: GET then SET is two operations — between them, another request could read the same stale count and also be allowed through (race condition). Redis INCR is atomic: it reads and increments in a single operation, guaranteed to be thread-safe. With 10 concurrent requests arriving simultaneously, each gets a unique count (1 through 10). No request is double-counted or under-counted.
+
+**Q134. What is the sliding window algorithm and when would you use it over fixed window?**
+A: Sliding window tracks the exact timestamp of each request (stored as a Redis sorted set). On each request, remove entries older than the window, count remaining, check against limit. No boundary burst — the window always covers the last N seconds regardless of when you check. Use it when precision matters (financial APIs, billing systems). Fixed window is fine for most APIs because the burst is small (2x at boundaries for a brief period) and implementation is much simpler.
+
+**Q135. What HTTP status code and headers should a rate-limited response include?**
+A: Status 429 Too Many Requests. Required headers: `Retry-After: <seconds>` — tells the client exactly when the rate limit resets. Optional: `X-RateLimit-Limit: 100`, `X-RateLimit-Remaining: 0`, `X-RateLimit-Reset: <unix timestamp>`. These headers let clients back off intelligently instead of retrying immediately (which just hits the limit again).
+
+**Q136. How do you rate limit across multiple API server workers?**
+A: In-memory counters are per-process — with 4 Gunicorn workers, the effective limit becomes 4x what you intend. Redis counters are shared across all workers (and across multiple server machines). Every worker increments the same Redis key, so the limit is enforced globally. This is why Redis is the standard choice for rate limiting in production.
+
+**Q137. What does FastAPI dependency chaining mean and how does it apply to rate limiting?**
+A: A FastAPI dependency can itself declare `Depends()`. FastAPI resolves the dependency tree automatically. `rate_limit_user` depends on `get_current_user` — FastAPI calls `get_current_user` first, then passes its result to `rate_limit_user`. The endpoint just declares `Depends(rate_limit_user)` and gets back a validated, rate-checked user. This composes authentication + authorization + rate limiting without any boilerplate in the endpoint itself.
+
+**Q138. Why cap conversation history before passing to the LLM?**
+A: LLMs have a maximum context window (e.g., Llama 3.3 via Groq: 32k tokens). A long conversation (50+ turns) can easily exceed this, causing the API call to fail or silently truncate. Capping history keeps token usage predictable, reduces inference cost (you pay per token), and prevents errors. The most recent messages are most relevant — older turns can be dropped without much quality loss. If full history matters, use a memory summarization approach (summarize old messages into a compact summary).
+
+**Q139. How would you implement conversation summarization for very long conversations?**
+A: When message count exceeds a threshold (e.g., 20 messages), summarize the oldest half using the LLM: "Summarize this conversation so far in 3-5 sentences." Store the summary as a special "system" message at the start of the retained history. Future queries see: [summary] + [recent 10 messages]. This preserves context without context overflow. More complex to implement than windowing but produces better results.
+
+**Q140. Why auto-generate conversation titles instead of requiring users to name them?**
+A: UX friction — asking users to name every conversation adds a step that most skip, leaving everything as "New Conversation". Auto-generated titles (from the first question) make the sidebar immediately useful: users can scan their history and find "Machine Learning Basics" vs "Python Error Debugging" without clicking into each one. The title generation is cheap (one small LLM call) and runs in the background so it doesn't delay the response.
+
+**Q141. What is a FastAPI BackgroundTask and when should you use it?**
+A: BackgroundTasks runs a function after the HTTP response is sent to the client. The client doesn't wait for it. Use it for non-critical work that improves the system but shouldn't delay the response: sending confirmation emails, generating titles, updating analytics counters, warming a cache. Don't use it for critical path operations (if it fails, the user gets no error) or long-running work (use Celery instead — BackgroundTasks ties up a worker thread).
+
+**Q142. How do you handle the case where auto-title generation fails?**
+A: Wrap the entire function in try/except and log a warning. The conversation keeps its default title ("New Conversation") — not ideal but not broken. The user can still rename it manually. Never let a non-critical background task crash the application or leak errors to the user. This is the "never let optional work fail loudly" principle.
+
+---
+
 ## "TELL ME ABOUT YOUR PROJECT" — 3 VERSIONS
 
 ### 30 seconds (elevator pitch)

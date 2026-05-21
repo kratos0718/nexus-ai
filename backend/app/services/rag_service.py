@@ -346,9 +346,44 @@ class RAGService:
         await db.refresh(msg)
         return msg
 
-    def _build_history(self, messages: list[Message]) -> list[dict]:
-        """Convert ORM Message rows into the list[dict] format Groq expects."""
-        return [{"role": m.role, "content": m.content} for m in messages]
+    def _build_history(self, messages: list[Message], max_turns: int = 10) -> list[dict]:
+        """
+        Convert ORM Message rows into the list[dict] format Groq expects.
+        Caps at max_turns most-recent messages to prevent context overflow on long chats.
+        """
+        recent = messages[-max_turns:] if len(messages) > max_turns else messages
+        return [{"role": m.role, "content": m.content} for m in recent]
+
+    async def _auto_title_conversation(
+        self,
+        db: AsyncSession,
+        conversation_id: str,
+        first_question: str,
+    ) -> None:
+        """Generate a short title from the first question and save it."""
+        try:
+            pipeline = get_pipeline()
+            prompt = (
+                f"Generate a short 4-6 word title for a conversation that starts with this question. "
+                f"Return ONLY the title, no quotes, no punctuation at the end.\n\nQuestion: {first_question}"
+            )
+            loop = asyncio.get_event_loop()
+            raw = await loop.run_in_executor(
+                None,
+                lambda: pipeline.generator.llm.invoke(prompt),
+            )
+            # LangChain returns an AIMessage — extract text
+            title = (raw.content if hasattr(raw, "content") else str(raw)).strip()[:80]
+            if title:
+                result = await db.execute(
+                    select(Conversation).where(Conversation.conversation_id == conversation_id)
+                )
+                conv = result.scalar_one_or_none()
+                if conv:
+                    conv.title = title
+                    await db.commit()
+        except Exception as e:
+            logger.warning(f"Auto-title failed for {conversation_id}: {e}")
 
     # ── Document DB helpers ───────────────────────────────────────────
 
