@@ -36,9 +36,20 @@ dev:
 test:
 	cd $(BACKEND_DIR) && conda run -n $(CONDA_ENV) pytest tests/ -v
 
+test-cov:
+	cd $(BACKEND_DIR) && conda run -n $(CONDA_ENV) pytest tests/ -v \
+		--cov=app --cov-report=term-missing --cov-fail-under=40
+
+# ── Linting ───────────────────────────────────────────────────────────────────
+lint:
+	cd $(BACKEND_DIR) && conda run -n $(CONDA_ENV) ruff check app/ tests/ --select E,F,W,I --ignore E501
+
+lint-fix:
+	cd $(BACKEND_DIR) && conda run -n $(CONDA_ENV) ruff check app/ tests/ --fix
+
 # ── Utilities ─────────────────────────────────────────────────────────────────
 reset-db:
 	rm -f $(BACKEND_DIR)/nexus.db
 	make migrate
 
-.PHONY: setup migrate backend frontend dev test reset-db
+.PHONY: setup migrate backend frontend dev test test-cov lint lint-fix reset-db
