@@ -21,6 +21,7 @@ class QueryRequest(BaseModel):
             "multiquery: generate 3 phrasings, retrieve for each, merge results."
         ),
     )
+    system_prompt_id: Optional[int] = Field(None, description="ID of a saved system prompt to use")
 
 
 class SourceReference(BaseModel):

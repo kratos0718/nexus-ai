@@ -169,6 +169,7 @@ class RAGService:
         document_id: Optional[str] = None,
         history: Optional[list[dict]] = None,
         retrieval_mode: str = "standard",
+        system_prompt: Optional[str] = None,
     ) -> QueryResponse:
         where = {"document_id": document_id} if document_id else None
 
@@ -191,6 +192,7 @@ class RAGService:
                     query=question,
                     context_results=pipeline._retrieve(hyde_text, where=where),
                     history=history,
+                    system_prompt=system_prompt,
                 )
             )
         elif retrieval_mode == "multiquery":
@@ -202,12 +204,13 @@ class RAGService:
                     query=question,
                     context_results=self._retrieve_multiquery(pipeline, variants, where),
                     history=history,
+                    system_prompt=system_prompt,
                 )
             )
         else:
             result = await loop.run_in_executor(
                 None,
-                lambda: pipeline.query(question, where=where, history=history)
+                lambda: pipeline.query(question, where=where, history=history, system_prompt=system_prompt)
             )
 
         response = QueryResponse(
@@ -237,6 +240,7 @@ class RAGService:
         question: str,
         document_id: Optional[str] = None,
         history: Optional[list[dict]] = None,
+        system_prompt: Optional[str] = None,
     ):
         """
         Async generator that yields SSE-formatted strings.
@@ -288,6 +292,7 @@ class RAGService:
                     query=question,
                     context_results=context_results,
                     history=history or [],
+                    system_prompt=system_prompt,
                 ):
                     token_queue.put(token)
             finally:

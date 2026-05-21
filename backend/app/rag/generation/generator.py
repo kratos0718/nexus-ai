@@ -75,7 +75,7 @@ class GroqGenerator:
         query: str,
         context_results: List[SearchResult],
         history: List[dict] | None = None,
-        system_prompt: str = SYSTEM_PROMPT,
+        system_prompt: Optional[str] = None,
     ) -> GenerationResult:
         context_text = format_context(context_results)
         user_message = CONTEXT_TEMPLATE.format(
@@ -83,7 +83,7 @@ class GroqGenerator:
             question=query,
         )
 
-        messages = [{"role": "system", "content": system_prompt}]
+        messages = [{"role": "system", "content": system_prompt or SYSTEM_PROMPT}]
         if history:
             messages.extend(history)
         messages.append({"role": "user", "content": user_message})
@@ -120,7 +120,7 @@ class GroqGenerator:
         query: str,
         context_results: List[SearchResult],
         history: List[dict] | None = None,
-        system_prompt: str = SYSTEM_PROMPT,
+        system_prompt: Optional[str] = None,
     ):
         """
         Yields text tokens one-by-one as they arrive from Groq.
@@ -133,7 +133,7 @@ class GroqGenerator:
             question=query,
         )
 
-        messages = [{"role": "system", "content": system_prompt}]
+        messages = [{"role": "system", "content": system_prompt or SYSTEM_PROMPT}]
 
         # Inject conversation history before the current question
         if history:
