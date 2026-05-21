@@ -245,6 +245,28 @@ HuggingFace · sentence-transformers · SQLAlchemy · JWT · WebSockets · RAGAS
 
 ---
 
+## DAY 11 BULLETS — LLM Observability & Request Tracing
+
+```
+• Built lightweight LLM observability layer: every query writes a trace row
+  (tokens, latency, model, user, cost) to PostgreSQL as a fire-and-forget
+  BackgroundTask — zero latency impact on users, full audit trail for debugging
+
+• Implemented aggregate stats endpoint (GET /traces/stats) computing total calls,
+  avg/min/max latency, error rate, token distribution, and estimated cost in USD
+  using SQLAlchemy func.avg/sum/count — no external monitoring tool required
+
+• Used time.monotonic() for latency measurement (immune to NTP clock adjustments)
+  and indexed llm_traces on created_at + user_id for sub-millisecond time-series
+  queries across millions of trace rows
+
+• Designed trace schema with separate prompt_tokens and completion_tokens columns
+  enabling per-model cost breakdown; capped stored text at 2k/5k chars to prevent
+  table bloat while retaining enough for production debugging
+```
+
+---
+
 ### For "AI/ML Engineer" roles
 Lead with: RAG pipeline, RAGAS evaluation, embedding models, hybrid search, reranking
 
