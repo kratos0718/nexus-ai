@@ -961,3 +961,22 @@ A: Simple approach: include `alembic upgrade head` in the Docker CMD before star
 
 **Q286. What happens when an API key is accidentally committed to git?**
 A: The key is permanently in git history even after deleting the file — visible to anyone who clones the repo. Immediate response: rotate the key at the provider (get a new one, invalidate the old), then scrub history with `git filter-repo` or BFG Repo Cleaner and force-push. Prevention: `.gitignore` for all `.env` files, pre-commit hooks with `detect-secrets` or `gitleaks`, and storing secrets only in platform-managed secret stores (Railway Variables, GitHub Secrets).
+
+---
+
+## Day 23 — Redis Caching & Performance
+
+**Q287. What is cache-aside and when do you use it?**
+A: Cache-aside (lazy loading): check cache first, on miss compute and store. It's the most common caching pattern because it only caches data that's actually requested. Use for read-heavy workloads where computation is expensive (LLM calls, complex queries). Trade-off: the first request for each key is always slow (cold start), but all subsequent requests are fast. Write operations skip the cache — it's kept in sync by TTL expiry.
+
+**Q288. Why use SHA256 for cache keys instead of the raw question string?**
+A: Two reasons: (1) Length — Redis keys can be long but shorter keys are faster and less memory intensive. SHA256 gives a fixed 64-char key regardless of question length. (2) Normalization — applying `.strip().lower()` before hashing means "What is the policy?" and "what is the policy?" map to the same hash, maximizing cache hits without extra lookup logic.
+
+**Q289. What is the difference between KEYS and SCAN in Redis?**
+A: `KEYS pattern` scans all keys in one atomic blocking operation — O(N) where N is total key count. With millions of keys, this freezes Redis for seconds, blocking all other clients. `SCAN` iterates in small batches (~100 keys per round), non-blocking between iterations. Functionally the same result, but SCAN never blocks for more than ~1ms per round. Always use SCAN in production systems.
+
+**Q290. What is P95 latency and why do companies prefer it over average?**
+A: P95 means 95% of requests complete faster than that value. Average hides outliers — 9 requests at 100ms and 1 at 10,000ms gives a 1,090ms average, masking the slow tail. P95 shows the "worst normal case." SLAs like "99% of users see responses under 2 seconds" are P99 latency commitments. Teams monitor P95/P99 because a degrading tail latency (timeouts, cold starts) won't show up in average metrics until it's affecting many users.
+
+**Q291. How do you handle cache invalidation when keys are hashed and can't be reverse-mapped?**
+A: Three approaches: (1) Flush the namespace — delete all `nexus:query:*` keys on any document change. Simple, correct, rebuilds on next use. Best for low-write systems. (2) Versioned keys — include a version counter in the key prefix, increment on any data change. Old keys become unreachable and expire naturally via TTL. (3) Reverse index — store a set of cache keys per document_id, delete selectively. Complex but enables surgical invalidation. Nexus AI uses approach 1 because document deletions are rare and rebuild is fast.
