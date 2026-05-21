@@ -16,6 +16,7 @@ from app.models.user import User
 from app.services.rag_service import rag_service
 from app.schemas.conversation import (
     ConversationCreate,
+    ConversationRename,
     ConversationResponse,
     ConversationDetailResponse,
     MessageResponse,
@@ -83,6 +84,30 @@ async def get_conversation(
         updated_at=conv.updated_at,
         message_count=len(conv.messages),
         messages=[MessageResponse.model_validate(m) for m in conv.messages],
+    )
+
+
+@router.patch("/{conversation_id}/title", response_model=ConversationResponse)
+async def rename_conversation(
+    conversation_id: str,
+    body: ConversationRename,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Rename a conversation."""
+    conv = await rag_service.get_conversation(db, conversation_id, current_user.id)
+    if not conv:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    conv.title = body.title.strip()[:80]
+    await db.commit()
+    await db.refresh(conv)
+    return ConversationResponse(
+        conversation_id=conv.conversation_id,
+        title=conv.title,
+        document_id=conv.document_id,
+        created_at=conv.created_at,
+        updated_at=conv.updated_at,
+        message_count=len(conv.messages),
     )
 
 

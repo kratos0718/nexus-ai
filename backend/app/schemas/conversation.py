@@ -10,6 +10,10 @@ class ConversationCreate(BaseModel):
     document_id: Optional[str] = None
 
 
+class ConversationRename(BaseModel):
+    title: str
+
+
 class MessageResponse(BaseModel):
     message_id: str
     role: str

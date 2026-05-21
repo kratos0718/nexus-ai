@@ -3,6 +3,7 @@ Reusable FastAPI dependencies.
 
 get_current_user  — extracts and validates JWT from Authorization header
                     raises 401 if token missing/invalid/expired
+rate_limit_user   — enforces per-user request rate limit (uses Redis)
 """
 
 from fastapi import Depends, HTTPException, status
@@ -50,3 +51,24 @@ async def get_current_user(
         )
 
     return user
+
+
+async def rate_limit_user(
+    current_user: User = Depends(get_current_user),
+) -> User:
+    """
+    Dependency — enforces per-user rate limit then returns the user.
+    Drop-in replacement for get_current_user on endpoints that need rate limiting.
+
+        async def my_endpoint(user: User = Depends(rate_limit_user)):
+    """
+    from app.core.rate_limit import check_rate_limit, RateLimitExceeded
+    try:
+        check_rate_limit(f"user:{current_user.id}")
+    except RateLimitExceeded as e:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=f"Rate limit exceeded. Try again in {e.retry_after}s.",
+            headers={"Retry-After": str(e.retry_after)},
+        )
+    return current_user
