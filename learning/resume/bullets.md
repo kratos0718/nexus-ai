@@ -46,7 +46,7 @@ Nexus AI — End-to-End LLM Application with RAG Pipeline, Vector Search, and ML
 ### Monitoring & MLOps
 - Integrated Langfuse for end-to-end LLM observability: tracing every prompt, retrieved context, token count, latency, and cost per request
 - Built RAGAS evaluation pipeline measuring Faithfulness (0.91), Answer Relevancy (0.88), Context Recall (0.85) on 100-question golden dataset — automated in CI/CD
-- Containerized full stack with Docker Compose (FastAPI + PostgreSQL + Redis + ChromaDB) with GitHub Actions CI/CD pipeline deploying to Railway on every main branch merge
+- Containerized full stack with Docker Compose (FastAPI + PostgreSQL + Redis + ChromaDB); GitHub Actions CI pipeline with lint, coverage gate, and TypeScript checks; frontend on Vercel
 
 ### Security
 - Implemented prompt injection detection scanning user inputs for adversarial patterns before processing, and structured prompt templates with XML delimiters to prevent context manipulation
@@ -468,11 +468,11 @@ Lead with: user-facing AI features, streaming UX, citation system, multi-tenant 
 - Configured pytest-cov with 40% minimum threshold; integrated ruff linter replacing flake8+isort
 - Implemented in-memory SQLite test strategy with SQLAlchemy dependency override for fast, isolated test runs
 
-## Day 22 — Cloud Deployment (Railway)
-- Deployed FastAPI + Next.js to Railway PaaS using multi-stage Dockerfiles with non-root user security
-- Configured separate liveness (/ping) and readiness (/health) probes; Railway healthcheck with 300s cold-start timeout for ML model loading
-- Extended GitHub Actions CI to a full CD pipeline: push to main → tests pass → Railway auto-deploys both services
-- Created production environment setup guide with Railway plugin variable injection and CORS configuration
+## Day 22 — Cloud Deployment
+- Containerized FastAPI + Next.js with production-grade multi-stage Dockerfiles; non-root user, health probes, alembic migration on startup
+- Configured separate liveness (/ping) and readiness (/health) probes; 300s cold-start tolerance for ML model loading (sentence-transformers)
+- Wired GitHub Actions CI to Vercel for automatic frontend deployments on every main branch push
+- Created platform-agnostic production environment guide; Docker Compose full-stack setup for any Linux server
 
 ## Day 23 — Redis Caching & Performance
 - Instrumented Redis query cache with atomic hit/miss counters (INCR); built cache stats API and observability dashboard panel
@@ -490,4 +490,4 @@ Lead with: user-facing AI features, streaming UX, citation system, multi-tenant 
 - Shipped RAGAS evaluation pipeline: offline eval runner scores Faithfulness 0.91 / Answer Relevancy 0.88 / Context Recall 0.85 on 5-case gold dataset using Groq as LLM judge
 - Built eval API endpoints with path traversal protection (resolve + relative_to guard) and auth enforcement; covered by 8-test pytest module
 - Wrote comprehensive system design guide for enterprise RAG platform: requirements → ingestion → retrieval → generation → scaling → RAGAS eval, with interview recall numbers
-- Completed 25-day AI engineering project: 11 test modules (90+ tests), 33 concept guides, 301 interview Q&As, deployed to Railway with full CI/CD pipeline
+- Completed 25-day AI engineering project: 11 test modules (90+ tests), 33 concept guides, 301 interview Q&As; frontend on Vercel, backend Docker Compose-ready
