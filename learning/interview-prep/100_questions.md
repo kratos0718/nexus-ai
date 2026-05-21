@@ -980,3 +980,22 @@ A: P95 means 95% of requests complete faster than that value. Average hides outl
 
 **Q291. How do you handle cache invalidation when keys are hashed and can't be reverse-mapped?**
 A: Three approaches: (1) Flush the namespace — delete all `nexus:query:*` keys on any document change. Simple, correct, rebuilds on next use. Best for low-write systems. (2) Versioned keys — include a version counter in the key prefix, increment on any data change. Old keys become unreachable and expire naturally via TTL. (3) Reverse index — store a set of cache keys per document_id, delete selectively. Complex but enables surgical invalidation. Nexus AI uses approach 1 because document deletions are rare and rebuild is fast.
+
+---
+
+## Day 24 — Testing Patterns & Test Suite Expansion
+
+**Q292. What is the difference between a unit test and an integration test?**
+A: Unit tests isolate one function — all external dependencies mocked. They run in milliseconds. Integration tests use real components wired together (real DB, real HTTP routing) — they run in seconds. Unit tests for correctness of logic, integration tests for correctness of wiring. Nexus AI uses integration tests for all HTTP endpoints (real SQLite, real FastAPI routing) and unit tests for pure functions (JWT encoding, bcrypt hashing, rate limiter logic) where mocking the external dep is natural.
+
+**Q293. How do you test auth-protected endpoints without repeating login in every test?**
+A: Create an `auth_client` pytest fixture that registers a user, logs in, and sets `Authorization: Bearer <token>` on the HTTP client headers — then yields `(client, user)`. Every test that needs auth just takes `auth_client` as a parameter and gets a pre-authenticated client. The fixture runs once per test function, so each test gets a fresh token against a fresh DB — isolation maintained.
+
+**Q294. What is FastAPI's `dependency_overrides` and why use it instead of mocking the ORM?**
+A: `dependency_overrides` is a dict on the FastAPI app that maps a dependency function to a replacement. Setting `app.dependency_overrides[get_db] = lambda: test_session` means every `Depends(get_db)` call resolves to `test_session` during that test. It's cleaner than patching the ORM because: (1) it respects FastAPI's DI graph, (2) it's scoped per test, (3) it tests the full stack including endpoint code that calls `await db.execute(...)`. Patching SQLAlchemy methods directly would be testing mocks, not code.
+
+**Q295. What is a coverage gate and how do you set the right threshold?**
+A: A coverage gate (`--cov-fail-under=N`) fails CI if test coverage drops below N%. Set the initial threshold to your current coverage so the pipeline passes today — then raise it incrementally as you add tests. It prevents a developer from merging a 500-line feature with zero tests. Coverage is a lower bound check, not a quality metric — 40% coverage with meaningful assertions beats 100% coverage with `assert True`.
+
+**Q296. How do you test graceful degradation when Redis is unavailable?**
+A: Use `unittest.mock.MagicMock` with `side_effect = ConnectionError(...)` to make the Redis client raise on any call. Then assert: (1) the endpoint still returns 200 (not 500), (2) the response contains sensible defaults (`redis_connected: false`, counts: 0). This verifies the try/except path in your code actually works — not just that it exists.
