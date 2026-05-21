@@ -36,7 +36,7 @@ async def query(
     Optionally pass conversation_id to get multi-turn context injected.
     If document_id is provided, only searches within that document.
     """
-    question = security_guard.validate_question(question)
+    question = security_guard.validate_question(request.question)
 
     if request.document_id:
         doc = await rag_service.get_document(db, request.document_id)
@@ -63,6 +63,7 @@ async def query(
             question=question,
             document_id=request.document_id,
             history=history,
+            retrieval_mode=request.retrieval_mode,
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Query failed: {str(e)}")
@@ -77,7 +78,7 @@ async def query(
         prompt_tokens=result.prompt_tokens,
         completion_tokens=result.completion_tokens,
         duration_ms=duration_ms,
-        trace_type="rag",
+        trace_type=f"rag_{request.retrieval_mode}",
         user_id=current_user.id,
         document_id=request.document_id,
     )
