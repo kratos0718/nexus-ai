@@ -92,14 +92,14 @@ class RAGPipeline:
 
     # ── Indexing ──────────────────────────────────────────────────────────────
 
-    def index_file(self, file_path: str, document_id: Optional[str] = None, display_name: Optional[str] = None) -> dict:
+    def index_file(self, file_path: str, document_id: Optional[str] = None, display_name: Optional[str] = None, chunk_strategy: Optional[str] = None) -> dict:
         document_id = document_id or str(uuid.uuid4())
-        logger.info(f"Indexing file: {file_path} [doc_id={document_id}]")
+        logger.info(f"Indexing file: {file_path} [doc_id={document_id}, strategy={chunk_strategy or self.chunk_strategy}]")
         raw_docs = load_file(file_path)
         if display_name:
             for doc in raw_docs:
                 doc.metadata["source"] = display_name
-        return self._index_raw_docs(raw_docs, document_id)
+        return self._index_raw_docs(raw_docs, document_id, chunk_strategy=chunk_strategy)
 
     def index_url(self, url: str, document_id: Optional[str] = None) -> dict:
         document_id = document_id or str(uuid.uuid4())
@@ -111,13 +111,14 @@ class RAGPipeline:
         raw_docs = [RawDocument(text=text, metadata={"source": source_name, "type": "text"})]
         return self._index_raw_docs(raw_docs, document_id)
 
-    def _index_raw_docs(self, raw_docs: List[RawDocument], document_id: str) -> dict:
+    def _index_raw_docs(self, raw_docs: List[RawDocument], document_id: str, chunk_strategy: Optional[str] = None) -> dict:
+        strategy = chunk_strategy or self.chunk_strategy
         chunks = chunk_documents(
             raw_docs,
-            strategy=self.chunk_strategy,
+            strategy=strategy,
             chunk_size=self.chunk_size,
             chunk_overlap=self.chunk_overlap,
-            embedder=self.embedder if self.chunk_strategy == "semantic" else None,
+            embedder=self.embedder if strategy == "semantic" else None,
         )
 
         if not chunks:

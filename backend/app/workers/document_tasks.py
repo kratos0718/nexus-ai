@@ -21,7 +21,7 @@ from app.core.celery_app import celery_app
     max_retries=3,
     default_retry_delay=60,   # wait 60s before retry
 )
-def index_document(self, document_id: str, file_path: str, filename: str):
+def index_document(self, document_id: str, file_path: str, filename: str, chunk_strategy: str = "recursive"):
     """
     `bind=True` gives access to `self` — the task instance.
     Used for self.retry() on failure.
@@ -40,7 +40,7 @@ def index_document(self, document_id: str, file_path: str, filename: str):
 
         doc.status = DocumentStatus.PROCESSING
         db.commit()
-        logger.info(f"[Task] Indexing started: {filename} ({document_id})")
+        logger.info(f"[Task] Indexing started: {filename} ({document_id}) [strategy={chunk_strategy}]")
 
         # Run the heavy embedding + vector upsert
         pipeline = get_pipeline()
@@ -48,6 +48,7 @@ def index_document(self, document_id: str, file_path: str, filename: str):
             file_path=file_path,
             document_id=document_id,
             display_name=filename,
+            chunk_strategy=chunk_strategy,
         )
 
         # Mark as ready

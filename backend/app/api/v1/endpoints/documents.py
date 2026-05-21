@@ -11,7 +11,7 @@ DELETE /documents/{id}         — delete document from DB + vector store
 import uuid
 from pathlib import Path
 
-from fastapi import APIRouter, UploadFile, File, BackgroundTasks, Depends, HTTPException, status
+from fastapi import APIRouter, UploadFile, File, BackgroundTasks, Depends, HTTPException, status, Form
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -35,10 +35,14 @@ ALLOWED_EXTENSIONS = {".pdf", ".txt", ".md", ".docx"}
 MAX_FILE_SIZE = 50 * 1024 * 1024  # 50 MB
 
 
+VALID_CHUNK_STRATEGIES = {"recursive", "semantic", "fixed"}
+
+
 @router.post("/upload", response_model=DocumentUploadResponse, status_code=status.HTTP_202_ACCEPTED)
 async def upload_document(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
+    chunking_strategy: str = Form("recursive"),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -46,6 +50,12 @@ async def upload_document(
     Upload a document and begin background indexing.
     Returns 202 immediately — poll GET /documents/{id}/status for progress.
     """
+    if chunking_strategy not in VALID_CHUNK_STRATEGIES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid chunking_strategy '{chunking_strategy}'. Choose from: {sorted(VALID_CHUNK_STRATEGIES)}",
+        )
+
     suffix = Path(file.filename).suffix.lower()
     if suffix not in ALLOWED_EXTENSIONS:
         raise HTTPException(
@@ -79,7 +89,7 @@ async def upload_document(
     celery_dispatched = False
     try:
         from app.workers.document_tasks import index_document
-        index_document.delay(document_id, str(temp_path), file.filename)
+        index_document.delay(document_id, str(temp_path), file.filename, chunking_strategy)
         celery_dispatched = True
     except Exception:
         pass
@@ -91,6 +101,7 @@ async def upload_document(
             document_id=document_id,
             db=db,
             original_filename=file.filename,
+            chunk_strategy=chunking_strategy,
         )
 
     return DocumentUploadResponse(

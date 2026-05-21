@@ -28,12 +28,21 @@ function formatBytes(bytes: number) {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
+type ChunkStrategy = "recursive" | "semantic" | "fixed";
+
+const STRATEGY_LABELS: Record<ChunkStrategy, string> = {
+  recursive: "Recursive (default)",
+  semantic:  "Semantic (topic-aware)",
+  fixed:     "Fixed size",
+};
+
 export default function DashboardPage() {
   const [docs, setDocs] = useState<Document[]>([]);
   const [uploading, setUploading] = useState(false);
   const [urlInput, setUrlInput] = useState("");
   const [urlLoading, setUrlLoading] = useState(false);
   const [error, setError] = useState("");
+  const [chunkStrategy, setChunkStrategy] = useState<ChunkStrategy>("recursive");
   const fileRef = useRef<HTMLInputElement>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -60,6 +69,7 @@ export default function DashboardPage() {
     setError("");
     const form = new FormData();
     form.append("file", file);
+    form.append("chunking_strategy", chunkStrategy);
     try {
       await api.post("/documents/upload", form, {
         headers: { "Content-Type": "multipart/form-data" },
@@ -115,7 +125,18 @@ export default function DashboardPage() {
         className="rounded-xl border p-6 mb-8 flex flex-col gap-4"
         style={{ background: "var(--surface)", borderColor: "var(--border)" }}
       >
-        <div className="flex gap-3 flex-wrap">
+        <div className="flex gap-3 flex-wrap items-center">
+          <select
+            value={chunkStrategy}
+            onChange={(e) => setChunkStrategy(e.target.value as ChunkStrategy)}
+            className="text-xs px-2 py-1.5 rounded-lg border outline-none"
+            style={{ background: "var(--surface-2)", borderColor: "var(--border)", color: "var(--text)" }}
+            title="Chunking strategy for this document"
+          >
+            {(Object.keys(STRATEGY_LABELS) as ChunkStrategy[]).map((s) => (
+              <option key={s} value={s}>{STRATEGY_LABELS[s]}</option>
+            ))}
+          </select>
           <button
             onClick={() => fileRef.current?.click()}
             disabled={uploading}
