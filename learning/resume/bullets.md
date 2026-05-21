@@ -361,6 +361,27 @@ HuggingFace · sentence-transformers · SQLAlchemy · JWT · WebSockets · RAGAS
 
 ---
 
+## DAY 16 BULLETS — Knowledge Base Explorer
+
+```
+• Built chunk browser API (GET /documents/{id}/chunks) exposing the raw
+  indexed content from ChromaDB — paginated by offset/limit, ordered by
+  chunk_index (document reading order) — enables debugging "why didn't
+  RAG find X?" without writing ad-hoc vector store scripts
+
+• Built pure retrieval endpoint (POST /search) running semantic search
+  without LLM generation, supporting all three retrieval modes (standard/
+  HyDE/multi-query) — separates retrieval quality from generation quality,
+  enabling isolation of which RAG layer causes incorrect answers
+
+• Built Next.js knowledge base explorer page with paginated chunk browser
+  and inline semantic search — click "Explore" on any ready document to
+  browse its 10 chunks at a time and run live similarity search with
+  scored results and expandable text previews
+```
+
+---
+
 ### For "AI/ML Engineer" roles
 Lead with: RAG pipeline, RAGAS evaluation, embedding models, hybrid search, reranking
 

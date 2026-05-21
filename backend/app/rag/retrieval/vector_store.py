@@ -45,6 +45,10 @@ class BaseVectorStore(ABC):
         """Return (ids, texts, metadatas) for BM25 rebuild. Override in stores that support it."""
         return [], [], []
 
+    def get_document_chunks(self, document_id: str) -> list["SearchResult"]:
+        """Return all stored chunks for one document, ordered by chunk_index."""
+        return []
+
 
 # ── ChromaDB (local) ──────────────────────────────────────────────────────────
 
@@ -132,6 +136,25 @@ class VectorStore(BaseVectorStore):
     def get_all_chunks(self) -> tuple:
         all_data = self._collection.get(include=["documents", "metadatas"])
         return all_data["ids"], all_data["documents"], all_data["metadatas"]
+
+    def get_document_chunks(self, document_id: str) -> list[SearchResult]:
+        """Return all stored chunks for one document, ordered by chunk_index."""
+        results = self._collection.get(
+            where={"document_id": document_id},
+            include=["documents", "metadatas"],
+        )
+        chunks = [
+            SearchResult(
+                text=doc,
+                score=1.0,
+                metadata=meta,
+                chunk_id=id_,
+            )
+            for doc, meta, id_ in zip(results["documents"], results["metadatas"], results["ids"])
+        ]
+        # Sort by chunk_index so they read in document order
+        chunks.sort(key=lambda c: c.metadata.get("chunk_index", 0))
+        return chunks
 
     @property
     def count(self) -> int:
