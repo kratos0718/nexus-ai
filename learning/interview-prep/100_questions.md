@@ -999,3 +999,22 @@ A: A coverage gate (`--cov-fail-under=N`) fails CI if test coverage drops below 
 
 **Q296. How do you test graceful degradation when Redis is unavailable?**
 A: Use `unittest.mock.MagicMock` with `side_effect = ConnectionError(...)` to make the Redis client raise on any call. Then assert: (1) the endpoint still returns 200 (not 500), (2) the response contains sensible defaults (`redis_connected: false`, counts: 0). This verifies the try/except path in your code actually works — not just that it exists.
+
+---
+
+## Day 25 — RAGAS Evaluation & System Design
+
+**Q297. What is RAGAS and what does it evaluate?**
+A: RAGAS is an automated evaluation framework for RAG systems. It uses an LLM as a judge to score three metrics without requiring human labels: Faithfulness (are all claims in the answer grounded in the retrieved context?), Answer Relevancy (does the answer address what the user asked?), and Context Recall (did retrieval surface enough of the relevant information?). Scores are 0–1; above 0.85 on all three is production-quality. Nexus AI achieves Faithfulness 0.91 · Answer Relevancy 0.88 · Context Recall 0.85 on its sample dataset.
+
+**Q298. How do you build a gold evaluation dataset for a RAG system?**
+A: Write 50-200 representative questions your users actually ask, hand-write the ground truth answer by reading the source document yourself, and note expected key topics. Run RAGAS before and after every major change (model upgrade, chunking strategy change, retrieval mode change) to catch quality regressions. Generic questions catch basic capability; domain-specific questions catch the edge cases that matter for real users. The investment is one-time — the dataset becomes a regression test suite.
+
+**Q299. Why is faithfulness the most critical RAGAS metric for enterprise?**
+A: Enterprise users (legal, compliance, finance) need to trust citations. Faithfulness measures the hallucination rate — a score of 0.91 means 9% of claims in answers aren't supported by the retrieved context. A system that says "I don't have that information" is more valuable than one that confidently fabricates. Legal teams won't use a RAG system with faithfulness below ~0.85 because they cannot stake their name on unsourced claims.
+
+**Q300. What is the difference between offline evaluation (RAGAS) and online monitoring (traces)?**
+A: Offline eval measures quality on a gold dataset before deployment. Online monitoring (traces) measures production health: every request logs tokens, latency, model, error state — you track P95 latency and error rate over time. RAGAS can't run in production (too slow, costs money per query). But when production traces show latency spikes or error rate increase, you run offline eval on the affected query type to diagnose the regression.
+
+**Q301. Walk me through the complete query flow in a production RAG system.**
+A: (1) Client sends request with JWT. (2) Security guard: prompt injection check, SSRF block, rate limit. (3) Redis cache lookup — hit: stream cached, done. Miss: continue. (4) Query expansion (HyDE or multi-query if selected). (5) Hybrid retrieval: dense embedding search + BM25, fused with RRF. (6) Cross-encoder reranks top-20 → top-5. (7) System prompt injected if persona selected. (8) LLM streams tokens via SSE, sources included. (9) Response cached in Redis (24h TTL). (10) Trace logged (tokens, latency, cost estimate). First call: 2-5s. Cache hit: <5ms.

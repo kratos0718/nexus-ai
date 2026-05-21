@@ -227,8 +227,8 @@ nexus-ai/
 │   │   ├── models/             # SQLAlchemy ORM (User, Document, Conversation, Trace, Feedback, SystemPrompt)
 │   │   ├── rag/                # Pipeline, embeddings, retrieval, generation
 │   │   └── services/           # Business logic (RAGService, TraceService, QueryProcessor)
-│   ├── eval/                   # RAGAS evaluation runner
-│   ├── tests/                  # pytest suite — 10 test modules, 80+ tests
+│   ├── eval/                   # RAGAS evaluation runner + results
+│   ├── tests/                  # pytest suite — 11 test modules, 90+ tests
 │   ├── railway.toml            # Railway deployment config
 │   └── .env.production.example # Production env vars reference
 ├── frontend/src/app/(app)/
@@ -237,9 +237,9 @@ nexus-ai/
 │   ├── observability/          # LLM metrics + cache stats dashboard
 │   └── system-prompts/         # Persona management
 ├── learning/
-│   ├── concepts/               # 31 deep-dive concept guides (embeddings → CI/CD → caching)
-│   ├── daily/                  # Build logs for Days 1–23
-│   ├── interview-prep/         # 291+ interview Q&As
+│   ├── concepts/               # 33 deep-dive concept guides (embeddings → CI/CD → system design)
+│   ├── daily/                  # Build logs for Days 1–25
+│   ├── interview-prep/         # 301+ interview Q&As
 │   └── resume/                 # ATS-ready resume bullets by day
 ├── docker-compose.yml
 ├── .github/workflows/ci.yml    # CI + CD pipeline
@@ -275,7 +275,7 @@ railway up --service nexus-backend
 
 The [`/learning`](./learning) directory is a complete study guide built alongside the project. Each concept guide goes from basics to production patterns with code examples, real-world analogies, and interview Q&A.
 
-**31 concept guides:** Embeddings · HNSW · RAG pipeline · Hybrid search · Reranking · HyDE · Multi-query · LangGraph · Structured outputs · JWT · Redis caching · Celery · Rate limiting · Security · RAGAS · CI/CD · Docker · React SSE · Observability · Vector databases · Chunking strategies · RLHF / DPO · Prompt engineering · Cloud deployment · Caching & performance
+**33 concept guides:** Embeddings · HNSW · RAG pipeline · Hybrid search · Reranking · HyDE · Multi-query · LangGraph · Structured outputs · JWT · Redis caching · Celery · Rate limiting · Security · RAGAS · CI/CD · Docker · React SSE · Observability · Vector databases · Chunking strategies · RLHF / DPO · Prompt engineering · Cloud deployment · Caching & performance · Testing patterns · System design (RAG)
 
 ---
 

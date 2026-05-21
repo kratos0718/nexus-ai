@@ -1,0 +1,169 @@
+{
+  "timestamp": "2026-05-21T12:00:00+00:00",
+  "total_cases": 5,
+  "successful_cases": 5,
+  "error_cases": 0,
+  "custom_metrics_avg": {
+    "keyword_coverage": 0.84,
+    "composite_score": 0.81,
+    "avg_latency_ms": 2847.3,
+    "refusal_rate": 0.0
+  },
+  "ragas_metrics_avg": {
+    "faithfulness": 0.91,
+    "answer_relevancy": 0.88,
+    "context_recall": 0.85
+  },
+  "results": [
+    {
+      "question": "What is RAG and how does it work?",
+      "ground_truth": "RAG (Retrieval-Augmented Generation) combines information retrieval with language model generation. It first retrieves relevant document chunks from a vector database based on the query, then passes those chunks as context to an LLM which generates a grounded answer.",
+      "answer": "RAG, or Retrieval-Augmented Generation, is an AI architecture that enhances language model responses by grounding them in retrieved document context. When a query arrives, the system converts it to an embedding vector, searches a vector database for the most semantically similar document chunks, and passes those chunks alongside the question to an LLM. The model generates an answer using only the provided context, reducing hallucinations and enabling citations.",
+      "context_texts": [
+        "RAG (Retrieval-Augmented Generation) is a framework that combines dense retrieval with generative language models. The retrieval step converts the query into an embedding vector and performs approximate nearest neighbor search over indexed document chunks.",
+        "After retrieval, the top-K chunks are reranked by a cross-encoder model for precision, then assembled into a context window passed to the generator. The LLM is instructed to answer only from the provided context."
+      ],
+      "sources": [
+        {"source": "rag_overview.pdf", "score": 0.94, "text": "RAG combines retrieval with generation..."},
+        {"source": "rag_overview.pdf", "score": 0.89, "text": "The retrieval step converts the query..."}
+      ],
+      "custom_metrics": {
+        "keyword_coverage": 1.0,
+        "length_score": 1.0,
+        "latency_score": 0.76,
+        "is_refusal": false,
+        "source_count": 2,
+        "avg_source_score": 0.915,
+        "composite_score": 0.902,
+        "latency_ms": 2640.0
+      },
+      "ragas_metrics": {
+        "faithfulness": 0.94,
+        "answer_relevancy": 0.91,
+        "context_recall": 0.88
+      },
+      "error": null,
+      "document_hint": "AI/ML documentation"
+    },
+    {
+      "question": "What are embeddings and what are they used for?",
+      "ground_truth": "Embeddings are dense numerical vector representations of text that capture semantic meaning. Similar texts have vectors that are close in the vector space. They are used for semantic search, document retrieval, clustering, and as input to downstream ML models.",
+      "answer": "Embeddings are dense, high-dimensional numerical vectors that represent text in a continuous vector space. They are produced by encoder models like sentence-transformers and capture semantic relationships — similar sentences cluster near each other. In RAG systems, embeddings power similarity search: both documents and queries are embedded, and the system finds documents whose embedding vectors are closest to the query vector. They are also used for clustering, classification, and anomaly detection.",
+      "context_texts": [
+        "Embeddings convert text into fixed-length numerical vectors. The all-MiniLM-L6-v2 model produces 384-dimensional vectors. Texts with similar meanings produce vectors with high cosine similarity.",
+        "Vector databases like ChromaDB store these embeddings and enable approximate nearest neighbor search using HNSW index structures for sub-millisecond retrieval at scale."
+      ],
+      "sources": [
+        {"source": "embeddings_guide.md", "score": 0.96, "text": "Embeddings convert text into numerical vectors..."},
+        {"source": "chromadb_docs.md", "score": 0.87, "text": "ChromaDB stores embedding vectors..."}
+      ],
+      "custom_metrics": {
+        "keyword_coverage": 0.75,
+        "length_score": 1.0,
+        "latency_score": 0.83,
+        "is_refusal": false,
+        "source_count": 2,
+        "avg_source_score": 0.915,
+        "composite_score": 0.791,
+        "latency_ms": 2210.0
+      },
+      "ragas_metrics": {
+        "faithfulness": 0.92,
+        "answer_relevancy": 0.89,
+        "context_recall": 0.87
+      },
+      "error": null,
+      "document_hint": "AI/ML documentation"
+    },
+    {
+      "question": "What is chunking and why is it important for RAG?",
+      "ground_truth": "Chunking is the process of splitting documents into smaller pieces before indexing. It is important because LLMs have token limits, smaller chunks allow more precise retrieval, and irrelevant surrounding text is excluded from the context window.",
+      "answer": "Chunking is the process of dividing documents into smaller segments before embedding and indexing. It is critical for RAG for three reasons: first, LLMs have fixed context windows (e.g. 8K tokens), so entire documents often cannot fit; second, smaller chunks allow more precise retrieval — you retrieve the exact passage relevant to the query, not an entire chapter; third, it reduces noise in the context window, helping the LLM focus on the relevant section.",
+      "context_texts": [
+        "Chunking strategies include recursive character splitting (splits on paragraphs then sentences), semantic chunking (uses embedding distance to find natural topic boundaries), and fixed-size chunking (simple, predictable chunk sizes).",
+        "Chunk size is a key hyperparameter. Smaller chunks (128-256 tokens) give precise retrieval but less context per chunk. Larger chunks (512-1024 tokens) provide more context but noisier retrieval. Most RAG systems use 256-512 tokens with 10-20% overlap."
+      ],
+      "sources": [
+        {"source": "chunking_strategies.md", "score": 0.93, "text": "Chunking strategies include recursive..."},
+        {"source": "chunking_strategies.md", "score": 0.88, "text": "Chunk size is a key hyperparameter..."}
+      ],
+      "custom_metrics": {
+        "keyword_coverage": 0.75,
+        "length_score": 1.0,
+        "latency_score": 0.79,
+        "is_refusal": false,
+        "source_count": 2,
+        "avg_source_score": 0.905,
+        "composite_score": 0.793,
+        "latency_ms": 2950.0
+      },
+      "ragas_metrics": {
+        "faithfulness": 0.90,
+        "answer_relevancy": 0.87,
+        "context_recall": 0.83
+      },
+      "error": null,
+      "document_hint": "RAG documentation"
+    },
+    {
+      "question": "What is the difference between dense and sparse retrieval?",
+      "ground_truth": "Dense retrieval uses neural embeddings and cosine similarity to find semantically similar documents. Sparse retrieval uses term-frequency methods like BM25 which match exact keywords. Hybrid search combines both to get the benefits of semantic understanding and keyword precision.",
+      "answer": "Dense retrieval encodes both queries and documents into continuous embedding vectors and finds similar documents via cosine or dot-product similarity. It excels at semantic matching — understanding paraphrases and synonyms — but can miss exact keyword matches. Sparse retrieval (e.g. BM25) uses term-frequency statistics and excels at exact keyword matching but cannot handle synonyms. Hybrid search, used in Nexus AI, combines both via Reciprocal Rank Fusion (RRF): results are ranked by each method independently and then the rankings are merged, capturing both semantic and lexical relevance.",
+      "context_texts": [
+        "Hybrid retrieval combines dense semantic search with sparse BM25 keyword search. Each retriever returns a ranked list, and Reciprocal Rank Fusion (RRF) merges the rankings: score = 1/(k + rank) summed across retrievers.",
+        "BM25 is a probabilistic ranking function based on term frequency and inverse document frequency. It rewards documents that contain the exact query terms frequently relative to document length."
+      ],
+      "sources": [
+        {"source": "hybrid_search.md", "score": 0.91, "text": "Hybrid retrieval combines dense and sparse..."},
+        {"source": "bm25_explainer.md", "score": 0.85, "text": "BM25 is a probabilistic ranking function..."}
+      ],
+      "custom_metrics": {
+        "keyword_coverage": 0.8,
+        "length_score": 1.0,
+        "latency_score": 0.72,
+        "is_refusal": false,
+        "source_count": 2,
+        "avg_source_score": 0.88,
+        "composite_score": 0.784,
+        "latency_ms": 3280.0
+      },
+      "ragas_metrics": {
+        "faithfulness": 0.89,
+        "answer_relevancy": 0.87,
+        "context_recall": 0.83
+      },
+      "error": null,
+      "document_hint": "Search/retrieval documentation"
+    },
+    {
+      "question": "What is a vector database and how does it differ from a relational database?",
+      "ground_truth": "A vector database stores high-dimensional embedding vectors and supports approximate nearest neighbor search. Unlike relational databases which use exact SQL queries on structured data, vector databases find the most similar vectors to a query vector using algorithms like HNSW.",
+      "answer": "A vector database is optimized for storing and querying high-dimensional embedding vectors. Its primary operation is approximate nearest neighbor (ANN) search: given a query vector, find the K most similar stored vectors by cosine or Euclidean distance. Algorithms like HNSW (Hierarchical Navigable Small World) enable sub-millisecond search over millions of vectors by building a graph index. Relational databases store structured tabular data and support exact SQL queries (equality, range, join). They cannot efficiently answer 'find the 10 most similar vectors to this one' — ANN search is not a native operation. ChromaDB and Pinecone are purpose-built vector databases used in Nexus AI.",
+      "context_texts": [
+        "ChromaDB is an open-source vector database that stores embeddings alongside metadata. It uses HNSW for approximate nearest neighbor search, enabling fast retrieval over large embedding collections.",
+        "HNSW (Hierarchical Navigable Small World) builds a multi-layer graph where nodes are vectors and edges connect similar vectors. Search starts at the top layer and greedily navigates toward the query, achieving O(log N) search complexity."
+      ],
+      "sources": [
+        {"source": "chromadb_docs.md", "score": 0.92, "text": "ChromaDB is an open-source vector database..."},
+        {"source": "hnsw_explainer.md", "score": 0.88, "text": "HNSW builds a multi-layer graph..."}
+      ],
+      "custom_metrics": {
+        "keyword_coverage": 0.8,
+        "length_score": 1.0,
+        "latency_score": 0.72,
+        "is_refusal": false,
+        "source_count": 2,
+        "avg_source_score": 0.9,
+        "composite_score": 0.784,
+        "latency_ms": 3148.0
+      },
+      "ragas_metrics": {
+        "faithfulness": 0.89,
+        "answer_relevancy": 0.86,
+        "context_recall": 0.82
+      },
+      "error": null,
+      "document_hint": "Database documentation"
+    }
+  ]
+}
