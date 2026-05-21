@@ -76,7 +76,12 @@ ragas==0.2.8                   # RAG evaluation framework
 # --- TESTING ---
 pytest==8.3.4
 pytest-asyncio==0.25.0
+pytest-cov==6.0.0              # Coverage reports
 httpx==0.28.1                  # Test HTTP client for FastAPI
+aiosqlite==0.20.0              # Async SQLite driver for in-memory test DB
+
+# --- LINTING ---
+ruff==0.8.6                    # Fast Python linter + formatter
 
 # --- UTILITIES ---
 python-slugify==8.0.4          # URL-friendly strings

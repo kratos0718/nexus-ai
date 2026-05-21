@@ -920,3 +920,25 @@ A: CoT prompting adds "Let's think step by step" or shows worked examples that i
 
 **Q275. What is few-shot prompting and when does it outperform zero-shot?**
 A: Few-shot provides labeled input/output examples before the real task. The model learns in-context from these examples without weight updates. It outperforms zero-shot when the output format is non-standard (the model can see an example instead of imagining it), when the task is domain-specific with unusual vocabulary, or when zero-shot consistently gives wrong structure. Trade-off: each shot consumes context window tokens.
+
+---
+
+## Day 21 — CI/CD & Testing
+
+**Q276. What is GitHub Actions and how does a workflow work?**
+A: GitHub Actions is a CI/CD system built into GitHub. A workflow is a YAML file in `.github/workflows/`. It triggers on events (push, pull_request), runs jobs on virtual machines called runners, and each job has steps that run shell commands or reusable Actions. Jobs run in parallel by default; `needs:` makes them wait for each other.
+
+**Q277. What is the difference between `npm install` and `npm ci`?**
+A: `npm install` resolves versions from `package.json` and can update `package-lock.json`. `npm ci` reads exact versions from `package-lock.json` and fails if it's out of sync with `package.json`. In CI/CD, always use `npm ci` — it guarantees reproducibility: same deps every run on every machine.
+
+**Q278. How do you keep API keys secure in a GitHub Actions workflow?**
+A: Store them in GitHub repository Secrets (Settings → Secrets → Actions). Reference them as `${{ secrets.MY_KEY }}`. They're masked in logs and never appear in the YAML file itself. For tests that don't call the real API, use a dummy placeholder so no secret is needed at all.
+
+**Q279. How do you test a FastAPI application that depends on a real database?**
+A: Use SQLAlchemy's `Base.metadata.create_all` on a SQLite in-memory engine in a pytest fixture. Override FastAPI's `get_db` dependency via `app.dependency_overrides` to yield a session connected to that test database. Each test gets an isolated database. The app code doesn't know it's SQLite — it just receives an `AsyncSession`. This pattern is fast (~5s for the full suite) and requires no external services.
+
+**Q280. What is test coverage and what is a realistic target for an AI backend?**
+A: Coverage is the % of source lines executed when tests run. For AI/ML backends, 40-60% total with 80%+ on critical paths (auth, API endpoints, business logic) is realistic. ML pipeline initialization, streaming generators, and external API calls require real infrastructure to test fully — you mock them in unit tests. The most important metric is that coverage doesn't decrease: a downward trend means new code is shipping untested.
+
+**Q281. What does `ruff` replace and why is it preferred in modern Python projects?**
+A: Ruff replaces flake8 (style/errors), isort (import sorting), pylint (code quality), and parts of pyupgrade — all in a single tool written in Rust. It runs 10-100x faster than the tools it replaces, has sensible defaults, and has become the standard linter in modern Python projects. Rule sets are selected with `--select E,F,W,I` matching flake8/isort conventions.

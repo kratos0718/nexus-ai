@@ -461,3 +461,9 @@ Lead with: user-facing AI features, streaming UX, citation system, multi-tenant 
 - Implemented LLM persona injection: system prompt resolved at query time, propagated through RAG pipeline to Groq generator
 - Built React settings page for persona management with inline create/edit/delete form and optimistic state updates
 - Added persona selector to chat toolbar; system prompt ID transmitted with SSE streaming requests
+
+## Day 21 — CI/CD Pipeline
+- Designed 4-job GitHub Actions pipeline: ruff lint → pytest with coverage gate → TypeScript check → summary status
+- Wrote 21 pytest tests covering system prompt CRUD and feedback endpoints including multi-user ownership isolation
+- Configured pytest-cov with 40% minimum threshold; integrated ruff linter replacing flake8+isort
+- Implemented in-memory SQLite test strategy with SQLAlchemy dependency override for fast, isolated test runs
