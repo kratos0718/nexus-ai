@@ -8,8 +8,11 @@ GET    /documents/{id}/status  — get one document's status
 DELETE /documents/{id}         — delete document from DB + vector store
 """
 
+import traceback
 import uuid
 from pathlib import Path
+
+from loguru import logger
 
 from fastapi import (
     APIRouter,
@@ -84,14 +87,18 @@ async def upload_document(
     temp_path = UPLOAD_DIR / f"{document_id}{suffix}"
     temp_path.write_bytes(file_bytes)
 
-    await rag_service.create_document_record(
-        db=db,
-        document_id=document_id,
-        filename=file.filename,
-        source_type=suffix.lstrip("."),
-        user_id=current_user.id,
-        file_size_bytes=len(file_bytes),
-    )
+    try:
+        await rag_service.create_document_record(
+            db=db,
+            document_id=document_id,
+            filename=file.filename,
+            source_type=suffix.lstrip("."),
+            user_id=current_user.id,
+            file_size_bytes=len(file_bytes),
+        )
+    except Exception as exc:
+        logger.error(f"create_document_record failed: {type(exc).__name__}: {exc}\n{traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"DB error: {type(exc).__name__}: {str(exc)[:300]}")
 
     # Prefer Celery (separate worker process) — fall back to asyncio background task
     # when Celery/Redis is unavailable (local dev without Redis)
