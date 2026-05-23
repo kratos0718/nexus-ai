@@ -1,3 +1,13 @@
+---
+title: Nexus Backend
+emoji: 🚀
+colorFrom: blue
+colorTo: purple
+sdk: docker
+app_port: 7860
+pinned: false
+---
+
 # Nexus AI — Enterprise Multi-Agent RAG Platform
 
 > Upload any documents. Ask complex questions in plain English. Get accurate answers with citations — powered by a multi-agent AI pipeline.
