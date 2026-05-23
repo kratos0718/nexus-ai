@@ -14,7 +14,13 @@ from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sess
 
 
 def _get_database_url() -> str:
-    return os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./nexus.db")
+    url = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./nexus.db")
+    if "postgresql" in url:
+        # asyncpg does not accept sslmode or channel_binding — strip them
+        url = re.sub(r"[?&]sslmode=[^&]*", "", url)
+        url = re.sub(r"[?&]channel_binding=[^&]*", "", url)
+        url = re.sub(r"\?$", "", url)  # remove trailing ? if params were stripped
+    return url
 
 
 def _to_sync_url(url: str) -> str:
@@ -29,8 +35,8 @@ def _to_sync_url(url: str) -> str:
 _async_url = _get_database_url()
 if "sqlite" in _async_url:
     _connect_args = {"check_same_thread": False}
-elif "neon.tech" in _async_url or "sslmode" not in _async_url and "postgresql" in _async_url:
-    _connect_args = {"ssl": True}
+elif "postgresql" in _async_url:
+    _connect_args = {"ssl": True}  # Neon always requires SSL
 else:
     _connect_args = {}
 
