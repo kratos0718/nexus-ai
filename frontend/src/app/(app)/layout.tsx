@@ -5,10 +5,20 @@ import Link from "next/link";
 import { isAuthenticated, logout, getMe } from "@/lib/auth";
 import type { User } from "@/types";
 
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
+
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const [user, setUser] = useState<User | null>(null);
+  const [backendReady, setBackendReady] = useState(true);
+
+  useEffect(() => {
+    // Ping backend; if it's sleeping (HF Space free tier) show a warm-up banner
+    fetch(`${API_BASE.replace("/api/v1", "")}/ping`)
+      .then(() => setBackendReady(true))
+      .catch(() => setBackendReady(false));
+  }, []);
 
   useEffect(() => {
     if (!isAuthenticated()) {
@@ -26,7 +36,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   ];
 
   return (
-    <div className="flex h-screen overflow-hidden" style={{ background: "var(--background)" }}>
+    <div className="flex flex-col h-screen overflow-hidden" style={{ background: "var(--background)" }}>
+      {!backendReady && (
+        <div className="w-full px-4 py-2 text-xs text-center font-medium" style={{ background: "#f59e0b", color: "#000" }}>
+          Backend is warming up — requests may take 30–60 seconds on first use. Please wait…
+        </div>
+      )}
+    <div className="flex flex-1 overflow-hidden" style={{ background: "var(--background)" }}>
       {/* Sidebar */}
       <aside
         className="w-56 flex-shrink-0 flex flex-col border-r"
@@ -90,6 +106,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
       {/* Main content */}
       <main className="flex-1 overflow-auto">{children}</main>
+    </div>
     </div>
   );
 }
