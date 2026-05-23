@@ -7,7 +7,6 @@ import enum
 from datetime import datetime
 
 from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
-from sqlalchemy import Enum as SAEnum
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -28,7 +27,7 @@ class Document(Base):
     user_id: Mapped[int | None]      = mapped_column(Integer, ForeignKey("users.id"), nullable=True, index=True)
     filename: Mapped[str]            = mapped_column(String(255))
     source_type: Mapped[str]         = mapped_column(String(20))     # "pdf" | "txt" | "url" | etc.
-    status: Mapped[DocumentStatus]   = mapped_column(SAEnum(DocumentStatus), default=DocumentStatus.PENDING)
+    status: Mapped[str]              = mapped_column(String(20), default="pending")
     chunks_count: Mapped[int]        = mapped_column(Integer, default=0)
     file_size_bytes: Mapped[int]     = mapped_column(Integer, default=0)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
