@@ -33,7 +33,7 @@ def _build_pipeline() -> RAGPipeline:
     embedding_provider = os.getenv("EMBEDDING_PROVIDER", "huggingface")
     vector_store_provider = os.getenv("VECTOR_STORE_PROVIDER", "chroma")
 
-    # For cloud/Vercel: set EMBEDDING_PROVIDER=openai and VECTOR_STORE_PROVIDER=pinecone
+    # openai = 1536 dims; huggingface / huggingface-api = 384 dims
     embedding_dimension = 1536 if embedding_provider == "openai" else 384
 
     return RAGPipeline(
