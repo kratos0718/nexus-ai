@@ -40,7 +40,13 @@ elif "postgresql" in _async_url:
 else:
     _connect_args = {}
 
-async_engine = create_async_engine(_async_url, echo=False, connect_args=_connect_args)
+async_engine = create_async_engine(
+    _async_url,
+    echo=False,
+    connect_args=_connect_args,
+    pool_pre_ping=True,   # detect stale connections after Neon autosuspend
+    pool_recycle=300,     # recycle connections every 5 min to prevent staleness
+)
 
 AsyncSessionLocal = async_sessionmaker(
     bind=async_engine,
