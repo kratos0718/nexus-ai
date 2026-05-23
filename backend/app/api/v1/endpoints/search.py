@@ -11,14 +11,11 @@ All retrieval modes (standard / hyde / multiquery) are supported.
 
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import APIRouter, Depends
 
-from app.core.database import get_db
 from app.core.dependencies import get_current_user
 from app.core.security_guard import security_guard
 from app.models.user import User
-from app.schemas.chat import QueryRequest
 from pydantic import BaseModel, Field
 
 router = APIRouter()

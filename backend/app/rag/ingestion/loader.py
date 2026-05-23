@@ -7,7 +7,7 @@ import re
 import requests
 from pathlib import Path
 from dataclasses import dataclass, field
-from typing import List, Optional
+from typing import List
 from loguru import logger
 from bs4 import BeautifulSoup
 
