@@ -10,8 +10,9 @@ python-multipart>=0.0.12
 mangum>=0.17.0
 
 # --- DATA VALIDATION ---
-pydantic>=2.10.0
+pydantic[email]>=2.10.0
 pydantic-settings>=2.6.0
+email-validator>=2.1.0
 
 # --- DATABASE ---
 sqlalchemy>=2.0.0
