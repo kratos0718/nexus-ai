@@ -197,10 +197,10 @@ export default function ChatPage() {
   useEffect(() => {
     api.get<{ documents: Document[] }>("/documents/").then(({ data }) =>
       setDocs(data.documents.filter((d) => d.status === "ready"))
-    );
+    ).catch(() => {});
     api.get<Conversation[]>("/conversations/").then(({ data }) =>
       setConversations(data)
-    );
+    ).catch(() => {});
     api.get<SystemPrompt[]>("/system-prompts/").then(({ data }) =>
       setPersonas(data)
     ).catch(() => {});
