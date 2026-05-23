@@ -62,16 +62,19 @@ _configure_logging()
 # ── Lifespan ──────────────────────────────────────────────────────────────────
 
 async def _seed_demo_user() -> None:
-    async with AsyncSessionLocal() as session:
-        result = await session.execute(select(User).where(User.email == "demo@nexus.ai"))
-        if result.scalar_one_or_none() is None:
-            session.add(User(
-                email="demo@nexus.ai",
-                full_name="Demo User",
-                hashed_password=hash_password("demo1234"),
-            ))
-            await session.commit()
-            logger.info("Demo user created")
+    try:
+        async with AsyncSessionLocal() as session:
+            result = await session.execute(select(User).where(User.email == "demo@nexus.ai"))
+            if result.scalar_one_or_none() is None:
+                session.add(User(
+                    email="demo@nexus.ai",
+                    full_name="Demo User",
+                    hashed_password=hash_password("demo1234"),
+                ))
+                await session.commit()
+                logger.info("Demo user created")
+    except Exception as e:
+        logger.warning(f"Demo user seed failed (non-fatal): {e}")
 
 
 @asynccontextmanager
