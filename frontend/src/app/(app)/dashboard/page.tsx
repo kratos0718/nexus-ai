@@ -47,16 +47,20 @@ export default function DashboardPage() {
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   async function fetchDocs() {
-    const { data } = await api.get<{ documents: Document[] }>("/documents/");
-    setDocs(data.documents);
+    try {
+      const { data } = await api.get<{ documents: Document[] }>("/documents/");
+      setDocs(data.documents);
+    } catch {
+      // silently ignore — backend may be warming up
+    }
   }
 
   useEffect(() => {
     fetchDocs();
-    // Poll every 3s while any doc is processing
+    // Poll every 5s while any doc is processing
     pollRef.current = setInterval(() => {
       fetchDocs();
-    }, 3000);
+    }, 5000);
     return () => {
       if (pollRef.current) clearInterval(pollRef.current);
     };
