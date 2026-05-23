@@ -71,9 +71,7 @@ export default function DashboardPage() {
     form.append("file", file);
     form.append("chunking_strategy", chunkStrategy);
     try {
-      await api.post("/documents/upload", form, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
+      await api.post("/documents/upload", form);
       await fetchDocs();
     } catch (err: unknown) {
       setError(
