@@ -27,7 +27,12 @@ def _to_sync_url(url: str) -> str:
 # ── Async engine (FastAPI) ────────────────────────────────────────────────────
 
 _async_url = _get_database_url()
-_connect_args = {"check_same_thread": False} if "sqlite" in _async_url else {}
+if "sqlite" in _async_url:
+    _connect_args = {"check_same_thread": False}
+elif "neon.tech" in _async_url or "sslmode" not in _async_url and "postgresql" in _async_url:
+    _connect_args = {"ssl": True}
+else:
+    _connect_args = {}
 
 async_engine = create_async_engine(_async_url, echo=False, connect_args=_connect_args)
 
