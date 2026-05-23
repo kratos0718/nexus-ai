@@ -78,74 +78,78 @@ class RAGService:
         self,
         file_path: str,
         document_id: str,
-        db: AsyncSession,
+        db: AsyncSession = None,  # kept for signature compat; not used
         original_filename: Optional[str] = None,
         chunk_strategy: Optional[str] = None,
     ) -> None:
         """
         Indexes a file in a background task.
-        Updates the Document DB row with status and chunk count when done.
+        Opens its own DB session — the request session is already closed by the
+        time FastAPI background tasks run.
         """
+        from app.core.database import AsyncSessionLocal
+
         pipeline = get_pipeline()
 
-        # Mark as processing
-        await self._update_status(db, document_id, DocumentStatus.PROCESSING)
+        async with AsyncSessionLocal() as session:
+            await self._update_status(session, document_id, DocumentStatus.PROCESSING)
 
-        try:
-            # run_in_executor: runs the blocking pipeline call in a thread pool
-            # so it doesn't block the FastAPI event loop
-            loop = asyncio.get_event_loop()
-            result = await loop.run_in_executor(
-                None,
-                lambda: pipeline.index_file(
-                    file_path,
-                    document_id=document_id,
-                    display_name=original_filename,
-                    chunk_strategy=chunk_strategy,
-                )
-            )
-
-            await self._update_status(
-                db, document_id, DocumentStatus.READY,
-                chunks_count=result["chunks_indexed"]
-            )
-            logger.info(f"Indexed {result['chunks_indexed']} chunks for {document_id}")
-
-        except Exception as e:
-            logger.error(f"Indexing failed for {document_id}: {e}")
-            await self._update_status(
-                db, document_id, DocumentStatus.FAILED,
-                error_message=str(e)
-            )
-        finally:
-            # Clean up the temp file
             try:
-                Path(file_path).unlink(missing_ok=True)
-            except Exception:
-                pass
+                loop = asyncio.get_event_loop()
+                result = await loop.run_in_executor(
+                    None,
+                    lambda: pipeline.index_file(
+                        file_path,
+                        document_id=document_id,
+                        display_name=original_filename,
+                        chunk_strategy=chunk_strategy,
+                    )
+                )
+
+                await self._update_status(
+                    session, document_id, DocumentStatus.READY,
+                    chunks_count=result["chunks_indexed"]
+                )
+                logger.info(f"Indexed {result['chunks_indexed']} chunks for {document_id}")
+
+            except Exception as e:
+                logger.error(f"Indexing failed for {document_id}: {e}")
+                await self._update_status(
+                    session, document_id, DocumentStatus.FAILED,
+                    error_message=str(e)
+                )
+            finally:
+                try:
+                    Path(file_path).unlink(missing_ok=True)
+                except Exception:
+                    pass
 
     async def index_url_background(
         self,
         url: str,
         document_id: str,
-        db: AsyncSession,
+        db: AsyncSession = None,  # kept for signature compat; not used
     ) -> None:
-        pipeline = get_pipeline()
-        await self._update_status(db, document_id, DocumentStatus.PROCESSING)
+        from app.core.database import AsyncSessionLocal
 
-        try:
-            loop = asyncio.get_event_loop()
-            result = await loop.run_in_executor(
-                None,
-                lambda: pipeline.index_url(url, document_id=document_id)
-            )
-            await self._update_status(
-                db, document_id, DocumentStatus.READY,
-                chunks_count=result["chunks_indexed"]
-            )
-        except Exception as e:
-            logger.error(f"URL indexing failed for {document_id}: {e}")
-            await self._update_status(db, document_id, DocumentStatus.FAILED, error_message=str(e))
+        pipeline = get_pipeline()
+
+        async with AsyncSessionLocal() as session:
+            await self._update_status(session, document_id, DocumentStatus.PROCESSING)
+
+            try:
+                loop = asyncio.get_event_loop()
+                result = await loop.run_in_executor(
+                    None,
+                    lambda: pipeline.index_url(url, document_id=document_id)
+                )
+                await self._update_status(
+                    session, document_id, DocumentStatus.READY,
+                    chunks_count=result["chunks_indexed"]
+                )
+            except Exception as e:
+                logger.error(f"URL indexing failed for {document_id}: {e}")
+                await self._update_status(session, document_id, DocumentStatus.FAILED, error_message=str(e))
 
     # ── Querying ──────────────────────────────────────────────────────
 
