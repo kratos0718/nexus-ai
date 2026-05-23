@@ -41,6 +41,7 @@ langchain-groq>=0.2.0
 langgraph>=0.2.0
 
 # --- VECTOR DATABASE ---
+chromadb==0.6.0
 pinecone>=5.0.0
 
 # --- DOCUMENT PROCESSING ---

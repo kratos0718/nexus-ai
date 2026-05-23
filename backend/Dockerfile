@@ -39,13 +39,13 @@ RUN mkdir -p uploads chroma_data
 RUN useradd -m -u 1000 nexus && chown -R nexus:nexus /app
 USER nexus
 
-# Expose FastAPI port (Railway overrides with $PORT)
+# Expose FastAPI port ($PORT is set by the hosting platform; falls back to 8000 locally)
 EXPOSE 8000
 
 # Health check — /ping has no DB dependency so it works during cold start
-HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=10s --start-period=90s --retries=3 \
     CMD curl -f http://localhost:${PORT:-8000}/ping || exit 1
 
 # Run migrations then start the server
-# $PORT is set by Railway (and most PaaS); falls back to 8000 for local Docker
-CMD ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} --workers 2"]
+# 1 worker: keeps memory under 512MB on free-tier hosts (sentence-transformers ~300MB)
+CMD ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} --workers 1"]
