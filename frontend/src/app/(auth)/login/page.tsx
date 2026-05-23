@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { login } from "@/lib/auth";
+import { login, register } from "@/lib/auth";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -10,6 +10,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [demoLoading, setDemoLoading] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -25,6 +26,21 @@ export default function LoginPage() {
       setError(msg);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleDemo() {
+    setDemoLoading(true);
+    setError("");
+    try {
+      // try to register first (no-op if user already exists)
+      await register("demo@nexus.ai", "demo1234", "Demo User").catch(() => {});
+      await login("demo@nexus.ai", "demo1234");
+      router.replace("/dashboard");
+    } catch {
+      setError("Demo login failed — please try again in a moment.");
+    } finally {
+      setDemoLoading(false);
     }
   }
 
@@ -93,7 +109,24 @@ export default function LoginPage() {
           </button>
         </form>
 
-        <p className="mt-6 text-sm text-center" style={{ color: "var(--text-muted)" }}>
+        <div className="mt-4">
+          <div className="flex items-center gap-3 my-4">
+            <div className="flex-1 h-px" style={{ background: "var(--border)" }} />
+            <span className="text-xs" style={{ color: "var(--text-muted)" }}>or</span>
+            <div className="flex-1 h-px" style={{ background: "var(--border)" }} />
+          </div>
+          <button
+            type="button"
+            onClick={handleDemo}
+            disabled={demoLoading}
+            className="w-full py-2.5 rounded-lg text-sm font-medium transition-opacity disabled:opacity-60 border"
+            style={{ borderColor: "var(--border)", color: "var(--text)", background: "var(--surface-2)" }}
+          >
+            {demoLoading ? "Loading demo…" : "Try Demo (no sign-up needed)"}
+          </button>
+        </div>
+
+        <p className="mt-4 text-sm text-center" style={{ color: "var(--text-muted)" }}>
           No account?{" "}
           <Link href="/register" style={{ color: "var(--accent)" }}>
             Create one

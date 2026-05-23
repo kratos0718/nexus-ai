@@ -17,9 +17,12 @@ from slowapi.errors import RateLimitExceeded
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 
-from app.core.database import create_tables, get_db
+from sqlalchemy import select
+from app.core.database import create_tables, get_db, AsyncSessionLocal
 from app.api.v1.router import api_router
 from app.middleware.request_id import RequestIDMiddleware
+from app.models.user import User
+from app.core.security import hash_password
 
 # Global rate limiter — keyed by client IP
 limiter = Limiter(key_func=get_remote_address)
@@ -58,10 +61,24 @@ _configure_logging()
 
 # ── Lifespan ──────────────────────────────────────────────────────────────────
 
+async def _seed_demo_user() -> None:
+    async with AsyncSessionLocal() as session:
+        result = await session.execute(select(User).where(User.email == "demo@nexus.ai"))
+        if result.scalar_one_or_none() is None:
+            session.add(User(
+                email="demo@nexus.ai",
+                full_name="Demo User",
+                hashed_password=hash_password("demo1234"),
+            ))
+            await session.commit()
+            logger.info("Demo user created")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("Starting Nexus AI...")
     await create_tables()
+    await _seed_demo_user()
     logger.info("Database tables ready")
     os.makedirs("./uploads", exist_ok=True)
     logger.info("Nexus AI ready. Visit http://localhost:8000/docs")
