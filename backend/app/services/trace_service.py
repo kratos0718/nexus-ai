@@ -9,7 +9,6 @@ Design decisions:
 """
 
 import uuid
-from datetime import datetime, UTC
 from typing import Optional
 
 from loguru import logger

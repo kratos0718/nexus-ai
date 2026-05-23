@@ -5,7 +5,7 @@ Takes (query, chunk) pairs and produces precise relevance scores.
 Run after bi-encoder retrieval to improve ranking quality.
 """
 
-from typing import List, Tuple
+from typing import List
 from loguru import logger
 
 from app.rag.retrieval.vector_store import SearchResult
