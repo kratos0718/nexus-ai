@@ -10,17 +10,17 @@ import time
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from fastapi.responses import StreamingResponse
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.dependencies import rate_limit_user
 from app.core.security_guard import security_guard
-from app.models.user import User
 from app.models.system_prompt import SystemPrompt
+from app.models.user import User
+from app.schemas.chat import QueryRequest, QueryResponse
 from app.services.rag_service import rag_service
 from app.services.trace_service import trace_service
-from app.schemas.chat import QueryRequest, QueryResponse
 
 router = APIRouter()
 

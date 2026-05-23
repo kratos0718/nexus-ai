@@ -17,17 +17,17 @@ Both the simple (rag) and complex (researcher) paths converge at synthesizer
 before reaching END.
 """
 
+from langgraph.graph import END, StateGraph
 from loguru import logger
-from langgraph.graph import StateGraph, END
 
-from app.agents.state import AgentState
 from app.agents.nodes import (
-    router_node,
     planner_node,
     rag_node,
     researcher_node,
+    router_node,
     synthesizer_node,
 )
+from app.agents.state import AgentState
 
 
 def _route(state: AgentState) -> str:

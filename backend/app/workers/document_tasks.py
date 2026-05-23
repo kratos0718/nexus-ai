@@ -12,6 +12,7 @@ Flow:
 """
 
 from loguru import logger
+
 from app.core.celery_app import celery_app
 
 

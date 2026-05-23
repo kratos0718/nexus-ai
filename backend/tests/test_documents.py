@@ -6,8 +6,9 @@ fast without GPU/model downloads.
 """
 
 import io
+from unittest.mock import AsyncMock, patch
+
 import pytest
-from unittest.mock import patch, AsyncMock
 
 
 def _mock_pipeline_result(chunks=5):

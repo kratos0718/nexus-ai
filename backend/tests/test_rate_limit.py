@@ -4,10 +4,11 @@ Unit tests for the Redis-based rate limiter.
 Uses mocked Redis so tests run without a live Redis instance.
 """
 
-import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
-from app.core.rate_limit import check_rate_limit, RateLimitExceeded
+import pytest
+
+from app.core.rate_limit import RateLimitExceeded, check_rate_limit
 
 
 def _make_redis_mock(current_count: int):

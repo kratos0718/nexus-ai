@@ -6,8 +6,9 @@ Pinecone  → Vercel/cloud, serverless-compatible, requires API key + index
 """
 
 from abc import ABC, abstractmethod
-from typing import List, Optional, Dict, Any
 from dataclasses import dataclass
+from typing import Any, Dict, List, Optional
+
 from loguru import logger
 
 from app.rag.ingestion.chunker import Chunk

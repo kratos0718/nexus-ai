@@ -13,14 +13,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.core.dependencies import get_current_user
 from app.models.user import User
-from app.services.rag_service import rag_service
 from app.schemas.conversation import (
     ConversationCreate,
+    ConversationDetailResponse,
     ConversationRename,
     ConversationResponse,
-    ConversationDetailResponse,
     MessageResponse,
 )
+from app.services.rag_service import rag_service
 
 router = APIRouter()
 

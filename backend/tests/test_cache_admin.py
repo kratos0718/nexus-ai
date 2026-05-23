@@ -8,7 +8,6 @@ not the Redis internals (covered by unit tests of cache.py).
 
 import pytest
 
-
 # ── Auth enforcement ──────────────────────────────────────────────────────────
 
 @pytest.mark.asyncio
@@ -78,7 +77,7 @@ async def test_cache_flush_returns_count(auth_client):
 @pytest.mark.asyncio
 async def test_cache_flush_with_redis_mocked(auth_client):
     """Verify flush returns correct count when Redis has entries."""
-    from unittest.mock import patch, MagicMock
+    from unittest.mock import MagicMock, patch
 
     client, _ = auth_client
 
@@ -95,7 +94,7 @@ async def test_cache_flush_with_redis_mocked(auth_client):
 @pytest.mark.asyncio
 async def test_cache_stats_with_redis_mocked(auth_client):
     """Verify stats return correct values when Redis is available."""
-    from unittest.mock import patch, MagicMock
+    from unittest.mock import MagicMock, patch
 
     client, _ = auth_client
 

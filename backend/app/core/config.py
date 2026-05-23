@@ -5,10 +5,11 @@ All values are read from environment variables (.env file).
 Follows 12-Factor App methodology: config from environment, never hardcoded.
 """
 
-from pydantic_settings import BaseSettings
-from pydantic import Field
-from typing import List
 from functools import lru_cache
+from typing import List
+
+from pydantic import Field
+from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):

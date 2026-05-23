@@ -7,9 +7,9 @@ DELETE /cache/flush  — flush all cached queries (useful after bulk document up
 
 from fastapi import APIRouter, Depends
 
+from app.core.cache import flush_query_cache, get_cache_stats
 from app.core.dependencies import get_current_user
 from app.models.user import User
-from app.core.cache import get_cache_stats, flush_query_cache
 
 router = APIRouter()
 

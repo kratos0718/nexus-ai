@@ -6,10 +6,10 @@ Covers: auth enforcement, list results, get latest, get by filename,
 """
 
 import json
-import pytest
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
 
 # ── Auth enforcement ──────────────────────────────────────────────────────────
 

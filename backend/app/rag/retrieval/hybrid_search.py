@@ -6,7 +6,8 @@ BM25 search finds exact keyword matches that dense search might miss.
 Reciprocal Rank Fusion (RRF) merges both result lists.
 """
 
-from typing import List, Dict
+from typing import Dict, List
+
 from loguru import logger
 
 from app.rag.retrieval.vector_store import SearchResult

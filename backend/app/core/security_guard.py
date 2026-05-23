@@ -16,8 +16,8 @@ None of these is 100%. They raise the cost of attack and catch the common cases.
 """
 
 import re
-from fastapi import HTTPException, status
 
+from fastapi import HTTPException, status
 
 # ── Configuration ─────────────────────────────────────────────────────────────
 

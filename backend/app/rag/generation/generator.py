@@ -5,12 +5,12 @@ Builds the final prompt from retrieved context and query,
 calls the LLM (Groq by default), returns answer + source citations.
 """
 
-from typing import List, Optional
 from dataclasses import dataclass
+from typing import List, Optional
+
 from loguru import logger
 
 from app.rag.retrieval.vector_store import SearchResult
-
 
 SYSTEM_PROMPT = """You are a precise knowledge assistant. Answer questions using ONLY the provided context.
 

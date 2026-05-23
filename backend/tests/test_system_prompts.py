@@ -6,7 +6,6 @@ Covers: create, list, get, update, delete, auth enforcement, ownership isolation
 
 import pytest
 
-
 VALID_PROMPT = {
     "name": "Legal expert",
     "description": "Answers using legal terminology",

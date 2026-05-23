@@ -7,9 +7,9 @@ rate_limit_user   — enforces per-user request rate limit (uses Redis)
 """
 
 from fastapi import Depends, HTTPException, status
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.security import decode_token
@@ -62,7 +62,7 @@ async def rate_limit_user(
 
         async def my_endpoint(user: User = Depends(rate_limit_user)):
     """
-    from app.core.rate_limit import check_rate_limit, RateLimitExceeded
+    from app.core.rate_limit import RateLimitExceeded, check_rate_limit
     try:
         check_rate_limit(f"user:{current_user.id}")
     except RateLimitExceeded as e:

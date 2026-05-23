@@ -5,9 +5,10 @@ LangGraph passes this dict from node to node.
 Each node reads what it needs and returns a partial dict to merge back in.
 """
 
-from typing import Annotated, Optional
-from typing_extensions import TypedDict
 import operator
+from typing import Annotated, Optional
+
+from typing_extensions import TypedDict
 
 
 class AgentState(TypedDict):

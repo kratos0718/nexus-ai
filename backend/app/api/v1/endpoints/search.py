@@ -12,11 +12,11 @@ All retrieval modes (standard / hyde / multiquery) are supported.
 from typing import Optional
 
 from fastapi import APIRouter, Depends
+from pydantic import BaseModel, Field
 
 from app.core.dependencies import get_current_user
 from app.core.security_guard import security_guard
 from app.models.user import User
-from pydantic import BaseModel, Field
 
 router = APIRouter()
 
@@ -60,9 +60,10 @@ async def semantic_search(
     """
     query = security_guard.validate_question(request.query)
 
-    from app.services.rag_service import get_pipeline
-    from app.services.query_processor import QueryProcessor
     import asyncio
+
+    from app.services.query_processor import QueryProcessor
+    from app.services.rag_service import get_pipeline
 
     pipeline = get_pipeline()
     where = {"document_id": request.document_id} if request.document_id else None

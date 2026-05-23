@@ -9,6 +9,7 @@ Three strategies available:
 
 from dataclasses import dataclass, field
 from typing import List, Literal
+
 from loguru import logger
 
 from app.rag.ingestion.loader import RawDocument

@@ -5,15 +5,13 @@ Covers: list traces (empty + after records exist), stats endpoint,
         auth enforcement, pagination params.
 """
 
-import pytest
-from unittest.mock import patch, AsyncMock
 
+import pytest
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 async def _insert_trace(auth_client, question="What is the policy?"):
     """Insert one trace record via the trace_service directly (no LLM call needed)."""
-    from app.services.trace_service import trace_service
 
     client, _ = auth_client
     # We need the db session — get it from the override
