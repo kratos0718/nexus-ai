@@ -73,7 +73,7 @@ function ChunkCard({ chunk, rank, score }: { chunk: Chunk | SearchChunk; rank?: 
             </span>
           )}
           <span className="text-xs" style={{ color: "var(--text-muted)" }}>
-            · {chunk.char_count ?? chunk.text.length} chars
+            · {"char_count" in chunk ? chunk.char_count : chunk.text.length} chars
           </span>
         </div>
         {score !== undefined && (
