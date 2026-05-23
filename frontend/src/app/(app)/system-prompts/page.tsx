@@ -19,6 +19,8 @@ export default function SystemPromptsPage() {
     try {
       const { data } = await api.get<SystemPrompt[]>("/system-prompts/");
       setPrompts(data);
+    } catch {
+      // silently ignore — backend may be warming up
     } finally {
       setLoading(false);
     }
