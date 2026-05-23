@@ -1,6 +1,6 @@
 """User ORM model."""
 
-from datetime import datetime, UTC
+from datetime import datetime
 from sqlalchemy import String, Boolean, DateTime
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -15,7 +15,7 @@ class User(Base):
     full_name: Mapped[str]   = mapped_column(String(255))
     hashed_password: Mapped[str] = mapped_column(String(255))
     is_active: Mapped[bool]  = mapped_column(Boolean, default=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     def __repr__(self) -> str:
         return f"<User {self.email}>"

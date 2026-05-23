@@ -3,7 +3,7 @@ SQLAlchemy ORM model for documents.
 Maps the `documents` table — tracks every file uploaded by every user.
 """
 
-from datetime import datetime, UTC
+from datetime import datetime
 from sqlalchemy import String, Integer, DateTime, Text, Enum as SAEnum, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column
 import enum
@@ -30,9 +30,9 @@ class Document(Base):
     chunks_count: Mapped[int]        = mapped_column(Integer, default=0)
     file_size_bytes: Mapped[int]     = mapped_column(Integer, default=0)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime]     = mapped_column(DateTime, default=lambda: datetime.now(UTC))
-    updated_at: Mapped[datetime]     = mapped_column(DateTime, default=lambda: datetime.now(UTC),
-                                                     onupdate=lambda: datetime.now(UTC))
+    created_at: Mapped[datetime]     = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime]     = mapped_column(DateTime, default=datetime.utcnow,
+                                                     onupdate=datetime.utcnow)
 
     def __repr__(self) -> str:
         return f"<Document {self.filename} [{self.status}]>"

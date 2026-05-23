@@ -1,4 +1,4 @@
-from datetime import datetime, UTC
+from datetime import datetime
 from sqlalchemy import String, Integer, Text, DateTime, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -13,4 +13,4 @@ class SystemPrompt(Base):
     name: Mapped[str]            = mapped_column(String(100))
     description: Mapped[str | None] = mapped_column(String(500), nullable=True)
     content: Mapped[str]         = mapped_column(Text)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

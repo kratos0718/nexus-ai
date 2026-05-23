@@ -10,7 +10,7 @@ Columns capture enough for:
   - Agent vs direct RAG (trace_type)
 """
 
-from datetime import datetime, UTC
+from datetime import datetime
 from sqlalchemy import String, Integer, Float, DateTime, Text, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -44,7 +44,7 @@ class LLMTrace(Base):
     # Error tracking (null = success)
     error: Mapped[str | None]         = mapped_column(Text, nullable=True)
 
-    created_at: Mapped[datetime]      = mapped_column(DateTime, default=lambda: datetime.now(UTC), index=True)
+    created_at: Mapped[datetime]      = mapped_column(DateTime, default=datetime.utcnow, index=True)
 
     def __repr__(self) -> str:
         return f"<LLMTrace {self.trace_type} {self.total_tokens}tok {self.duration_ms:.0f}ms>"
