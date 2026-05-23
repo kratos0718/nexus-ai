@@ -1,6 +1,6 @@
 """Conversation and Message ORM models for multi-turn chat history."""
 
-from datetime import datetime, UTC
+from datetime import datetime
 from sqlalchemy import String, Integer, Text, DateTime, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -15,9 +15,9 @@ class Conversation(Base):
     user_id: Mapped[int]     = mapped_column(Integer, ForeignKey("users.id"), index=True)
     title: Mapped[str]       = mapped_column(String(500), default="New Conversation")
     document_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC),
-                                                  onupdate=lambda: datetime.now(UTC))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow,
+                                                  onupdate=datetime.utcnow)
 
     messages: Mapped[list["Message"]] = relationship("Message", back_populates="conversation",
                                                       order_by="Message.created_at")
@@ -34,6 +34,6 @@ class Message(Base):
     sources: Mapped[str | None]  = mapped_column(Text, nullable=True)  # JSON string
     prompt_tokens: Mapped[int]   = mapped_column(Integer, default=0)
     completion_tokens: Mapped[int] = mapped_column(Integer, default=0)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     conversation: Mapped["Conversation"] = relationship("Conversation", back_populates="messages")

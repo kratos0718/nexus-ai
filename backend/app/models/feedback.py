@@ -1,4 +1,4 @@
-from datetime import datetime, UTC
+from datetime import datetime
 from sqlalchemy import String, Integer, Text, DateTime, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -16,4 +16,4 @@ class MessageFeedback(Base):
     rating: Mapped[int]          = mapped_column(Integer)   # 1 = positive, -1 = negative
     comment: Mapped[str | None]  = mapped_column(Text, nullable=True)
     retrieval_mode: Mapped[str]  = mapped_column(String(20), default="standard")
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
