@@ -14,10 +14,10 @@ from app.core.database import get_db
 from app.core.dependencies import rate_limit_user
 from app.core.security_guard import security_guard
 from app.models.user import User
-from app.services.agent_service import agent_service
-from app.services.rag_service import rag_service
 from app.schemas.agent import AgentQueryRequest, AgentQueryResponse
 from app.schemas.chat import SourceReference
+from app.services.agent_service import agent_service
+from app.services.rag_service import rag_service
 
 router = APIRouter()
 

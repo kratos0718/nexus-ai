@@ -12,14 +12,15 @@ Provider selection via environment variables:
 
 import uuid
 from typing import List, Optional
+
 from loguru import logger
 
-from app.rag.ingestion.loader import RawDocument, load_file, load_url
-from app.rag.ingestion.chunker import chunk_documents, ChunkStrategy
 from app.rag.embeddings.embedder import BaseEmbedder, get_embedder
-from app.rag.retrieval.vector_store import BaseVectorStore, get_vector_store
+from app.rag.generation.generator import GenerationResult, GroqGenerator
+from app.rag.ingestion.chunker import ChunkStrategy, chunk_documents
+from app.rag.ingestion.loader import RawDocument, load_file, load_url
 from app.rag.retrieval.hybrid_search import BM25Index, reciprocal_rank_fusion
-from app.rag.generation.generator import GroqGenerator, GenerationResult
+from app.rag.retrieval.vector_store import BaseVectorStore, get_vector_store
 
 
 class RAGPipeline:

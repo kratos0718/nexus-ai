@@ -7,11 +7,11 @@ Runs the graph in a thread pool so it doesn't block the FastAPI event loop.
 import asyncio
 import json
 from typing import Optional
+
 from loguru import logger
 
 from app.agents.graph import build_agent_graph
 from app.agents.state import AgentState
-
 
 # Singleton graph — compiled once, reused for every request
 _graph = None
@@ -86,8 +86,8 @@ class AgentService:
           data: [SOURCES]{...}      ← citations
           data: [DONE]              ← stream complete
         """
-        import threading
         import queue
+        import threading
 
         graph = get_graph()
         where = {"document_id": document_id} if document_id else None

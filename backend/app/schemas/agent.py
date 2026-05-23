@@ -1,6 +1,7 @@
 """Pydantic schemas for the multi-agent API."""
 
 from typing import Optional
+
 from pydantic import BaseModel, Field
 
 from app.schemas.chat import SourceReference

@@ -20,11 +20,11 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.models.document import Document, DocumentStatus
+from app.core.cache import get_cached_query, invalidate_document_cache, set_cached_query
 from app.models.conversation import Conversation, Message
+from app.models.document import Document, DocumentStatus
 from app.rag.pipeline import RAGPipeline
 from app.schemas.chat import QueryResponse, SourceReference
-from app.core.cache import get_cached_query, set_cached_query, invalidate_document_cache
 from app.services.query_processor import QueryProcessor
 
 

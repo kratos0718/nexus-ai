@@ -11,20 +11,29 @@ DELETE /documents/{id}         — delete document from DB + vector store
 import uuid
 from pathlib import Path
 
-from fastapi import APIRouter, UploadFile, File, BackgroundTasks, Depends, HTTPException, status, Form
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    UploadFile,
+    status,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.dependencies import get_current_user
 from app.core.security_guard import security_guard
 from app.models.user import User
-from app.services.rag_service import rag_service
 from app.schemas.document import (
-    DocumentUploadResponse,
-    DocumentStatusResponse,
     DocumentListResponse,
+    DocumentStatusResponse,
+    DocumentUploadResponse,
     URLIndexRequest,
 )
+from app.services.rag_service import rag_service
 
 router = APIRouter()
 
@@ -204,8 +213,9 @@ async def get_document_chunks(
     if doc.status != "ready":
         raise HTTPException(status_code=409, detail=f"Document not ready (status: {doc.status})")
 
-    from app.services.rag_service import get_pipeline
     import asyncio
+
+    from app.services.rag_service import get_pipeline
 
     pipeline = get_pipeline()
     loop = asyncio.get_event_loop()

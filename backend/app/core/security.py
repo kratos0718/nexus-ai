@@ -4,7 +4,7 @@ All auth primitives live here — imported by auth endpoints and the get_current
 """
 
 import os
-from datetime import datetime, timedelta, UTC
+from datetime import UTC, datetime, timedelta
 from typing import Optional
 
 from jose import JWTError, jwt

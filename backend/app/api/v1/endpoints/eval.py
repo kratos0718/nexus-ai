@@ -17,7 +17,6 @@ from fastapi import APIRouter, Depends, HTTPException
 from app.core.dependencies import get_current_user
 from app.models.user import User
 
-
 router = APIRouter()
 
 RESULTS_DIR = Path(__file__).parent.parent.parent.parent.parent / "eval" / "results"

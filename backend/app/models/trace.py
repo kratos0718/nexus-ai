@@ -11,7 +11,8 @@ Columns capture enough for:
 """
 
 from datetime import datetime
-from sqlalchemy import String, Integer, Float, DateTime, Text, ForeignKey
+
+from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base

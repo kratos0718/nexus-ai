@@ -5,8 +5,8 @@ Covers: submit positive/negative, stats calculation, JSONL export, auth enforcem
 """
 
 import json
-import pytest
 
+import pytest
 
 SAMPLE_FEEDBACK = {
     "question": "What is the refund policy?",
@@ -83,7 +83,7 @@ async def test_export_feedback_returns_jsonl(auth_client):
     assert res.status_code == 200
     assert "ndjson" in res.headers.get("content-type", "")
 
-    lines = [l for l in res.text.strip().split("\n") if l]
+    lines = [ln for ln in res.text.strip().split("\n") if ln]
     assert len(lines) == 1
 
     record = json.loads(lines[0])
@@ -101,9 +101,9 @@ async def test_export_multiple_records(auth_client):
     await client.post("/api/v1/feedback/", json={**SAMPLE_FEEDBACK, "rating": -1})
 
     res = await client.get("/api/v1/feedback/export")
-    lines = [l for l in res.text.strip().split("\n") if l]
+    lines = [ln for ln in res.text.strip().split("\n") if ln]
     assert len(lines) == 2
-    ratings = [json.loads(l)["rating"] for l in lines]
+    ratings = [json.loads(ln)["rating"] for ln in lines]
     assert set(ratings) == {1, -1}
 
 

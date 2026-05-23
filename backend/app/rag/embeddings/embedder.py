@@ -10,6 +10,7 @@ Swapping providers requires zero changes in the calling code.
 
 from abc import ABC, abstractmethod
 from typing import List
+
 import numpy as np
 from loguru import logger
 

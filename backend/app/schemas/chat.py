@@ -3,6 +3,7 @@ Pydantic schemas for chat/query API.
 """
 
 from typing import Literal, Optional
+
 from pydantic import BaseModel, Field
 
 

@@ -13,10 +13,10 @@ Usage:
     check_rate_limit(identifier="user:42")   # raises on limit hit
 """
 
-import time
 import os
-from loguru import logger
+import time
 
+from loguru import logger
 
 # Limits — tweak via env vars for easy prod config
 _USER_LIMIT = int(os.getenv("RATE_LIMIT_USER_PER_HOUR", "100"))

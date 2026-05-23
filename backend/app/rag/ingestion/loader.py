@@ -4,12 +4,13 @@ Returns normalized list of (text, metadata) tuples for downstream chunking.
 """
 
 import re
-import requests
-from pathlib import Path
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import List
-from loguru import logger
+
+import requests
 from bs4 import BeautifulSoup
+from loguru import logger
 
 
 @dataclass

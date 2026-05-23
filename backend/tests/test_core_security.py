@@ -4,19 +4,14 @@ Unit tests for app.core.security — JWT creation/decoding and password hashing.
 These are pure Python tests (no HTTP client, no database).
 """
 
-import time
-import pytest
-from unittest.mock import patch
 
 from app.core.security import (
-    hash_password,
-    verify_password,
     create_access_token,
     create_refresh_token,
     decode_token,
-    ACCESS_TOKEN_EXPIRE_MINUTES,
+    hash_password,
+    verify_password,
 )
-
 
 # ── Password hashing ──────────────────────────────────────────────────────────
 
@@ -124,9 +119,11 @@ def test_access_token_type_check():
 
 def test_expired_token_returns_none():
     """Simulate an expired token by back-dating the expiry."""
-    from datetime import datetime, timedelta, UTC
+    from datetime import UTC, datetime, timedelta
+
     from jose import jwt
-    from app.core.security import JWT_SECRET, JWT_ALGORITHM
+
+    from app.core.security import JWT_ALGORITHM, JWT_SECRET
 
     expired_payload = {
         "sub": "1",

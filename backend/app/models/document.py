@@ -3,10 +3,12 @@ SQLAlchemy ORM model for documents.
 Maps the `documents` table — tracks every file uploaded by every user.
 """
 
-from datetime import datetime
-from sqlalchemy import String, Integer, DateTime, Text, Enum as SAEnum, ForeignKey
-from sqlalchemy.orm import Mapped, mapped_column
 import enum
+from datetime import datetime
+
+from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import Enum as SAEnum
+from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
 

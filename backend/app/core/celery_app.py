@@ -9,6 +9,7 @@ Workers run in a separate process:
 """
 
 import os
+
 from celery import Celery
 
 celery_app = Celery(

@@ -9,8 +9,9 @@ returns a typed Pydantic model instead of free-text — no string parsing needed
 
 import os
 from typing import Literal
-from loguru import logger
+
 from langchain_groq import ChatGroq
+from loguru import logger
 from pydantic import BaseModel, Field
 
 from app.agents.state import AgentState
