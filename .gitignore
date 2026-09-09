@@ -39,6 +39,10 @@ node_modules/
 out/
 .turbo/
 
+# dropped into frontend/ by `next dev` on every run
+frontend/AGENTS.md
+frontend/CLAUDE.md
+
 # IDE
 .vscode/
 .idea/
